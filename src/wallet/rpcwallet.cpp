@@ -134,6 +134,7 @@ UniValue listevents(const UniValue& params, bool fHelp)
         mlOdds.push_back(Pair("mlAway", (uint64_t) plEvent.nAwayOdds));
         mlOdds.push_back(Pair("mlDraw", (uint64_t) plEvent.nDrawOdds));
 
+        spreadOdds.push_back(Pair("spreadVersion", (uint64_t) plEvent.nSpreadVersion));
         spreadOdds.push_back(Pair("spreadPoints", (uint64_t) plEvent.nSpreadPoints));
         spreadOdds.push_back(Pair("spreadHome", (uint64_t) plEvent.nSpreadHomeOdds));
         spreadOdds.push_back(Pair("spreadAway", (uint64_t) plEvent.nSpreadAwayOdds));
@@ -613,11 +614,11 @@ UniValue listbetsdb(const UniValue& params, bool fHelp)
     }
 
     auto it = bettingsView->bets->NewIterator();
-    UniversalBetKey key{0, COutPoint()};
-    auto v = CBettingDB::DbTypeToBytes(key);
     for(it->Seek(std::vector<unsigned char>{}); it->Valid(); it->Next()) {
+        UniversalBetKey key;
         CUniversalBet uniBet;
         CBettingDB::BytesToDbType(it->Value(), uniBet);
+        CBettingDB::BytesToDbType(it->Key(), key);
 
         if (!includeHandled && uniBet.IsCompleted()) continue;
 
@@ -630,7 +631,9 @@ UniValue listbetsdb(const UniValue& params, bool fHelp)
             uLeg.push_back(Pair("outcome", (uint64_t) leg.nOutcome));
             uLegs.push_back(uLeg);
         }
-
+        uValue.push_back(Pair("betBlockHeight", (uint64_t) key.blockHeight));
+        uValue.push_back(Pair("betTxHash", key.outPoint.hash.GetHex()));
+        uValue.push_back(Pair("betTxOut", (uint64_t) key.outPoint.n));
         uValue.push_back(Pair("legs", uLegs));
         uValue.push_back(Pair("address", uniBet.playerAddress.ToString()));
         uValue.push_back(Pair("amount", ValueFromAmount(uniBet.betAmount)));
@@ -1124,7 +1127,7 @@ UniValue placebet(const UniValue& params, bool fHelp)
     EnsureEnoughWagerr(nAmount);
 
     CBitcoinAddress address("");
-    int eventId = params[0].get_int();
+    uint32_t eventId = static_cast<uint32_t>(params[0].get_int64());
     int outcome = params[1].get_int();
     CPeerlessBet plBet(eventId, (OutcomeType) outcome);
 
@@ -1192,7 +1195,7 @@ UniValue placeparlaybet(const UniValue& params, bool fHelp)
 
         RPCTypeCheckObj(obj, boost::assign::map_list_of("eventId", UniValue::VNUM)("outcome", UniValue::VNUM));
 
-        uint32_t eventId = find_value(obj, "eventId").get_int();
+        uint32_t eventId = static_cast<uint32_t>(find_value(obj, "eventId").get_int64());
         OutcomeType outcomeType = (OutcomeType) find_value(obj, "outcome").get_int();
         vLegs.emplace_back(eventId, outcomeType);
     }
@@ -1377,7 +1380,9 @@ UniValue getchaingamesinfo(const UniValue& params, bool fHelp)
     }
 
     if (resultHeight > Params().BetStartHeight() && fShowWinner) {
-        std::vector<CBetOut> betOuts = GetCGLottoBetPayouts(resultHeight);
+        std::vector<CPayoutInfo> vExpectedPayoutsInfo;
+        std::vector<CBetOut> betOuts;
+        GetCGLottoBetPayouts(resultHeight, betOuts, vExpectedPayoutsInfo);
         for (auto betOut : betOuts) {
             if (!winningBetFound && betOut.nEventId == eventID) {
                 winningBetOut = betOut;

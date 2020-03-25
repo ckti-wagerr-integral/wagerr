@@ -682,15 +682,22 @@ bool CPeerlessSpreadsEvent::FromOpCode(std::string opCode, CPeerlessSpreadsEvent
     }
 
     // Ensure the peerless result OpCode has the correct BTX format version number.
-    if (ReadBTXFormatVersion(opCode) != BTX_FORMAT_VERSION) {
+    pse.nVersion = ReadBTXFormatVersion(opCode);
+    if (pse.nVersion == 1) {
+        pse.nEventId   = FromChars(opCode[3], opCode[4], opCode[5], opCode[6]);
+        pse.nPoints    = FromChars(opCode[7], opCode[8]);
+        pse.nHomeOdds  = FromChars(opCode[9], opCode[10], opCode[11], opCode[12]);
+        pse.nAwayOdds  = FromChars(opCode[13], opCode[14], opCode[15], opCode[16]);
+    } else if (pse.nVersion == 2) {
+        pse.nEventId   = FromChars(opCode[3], opCode[4], opCode[5], opCode[6]);
+        pse.nPoints    = (int16_t)(FromChars(opCode[7], opCode[8]) & 0xffff);
+        pse.nHomeOdds  = FromChars(opCode[9], opCode[10], opCode[11], opCode[12]);
+        pse.nAwayOdds  = FromChars(opCode[13], opCode[14], opCode[15], opCode[16]);
+    } else {
         // TODO - add proper error handling
         return false;
     }
 
-    pse.nEventId   = FromChars(opCode[3], opCode[4], opCode[5], opCode[6]);
-    pse.nPoints    = FromChars(opCode[7], opCode[8]);
-    pse.nHomeOdds  = FromChars(opCode[9], opCode[10], opCode[11], opCode[12]);
-    pse.nAwayOdds  = FromChars(opCode[13], opCode[14], opCode[15], opCode[16]);
 
     return true;
 }
@@ -968,11 +975,12 @@ bool IsValidOracleTx(const CTxIn &txin)
  * @param nMNBetReward  The Oracle masternode reward.
  * @return
  */
-int64_t GetBlockPayouts(std::vector<CBetOut>& vExpectedPayouts, CAmount& nMNBetReward)
+int64_t GetBlockPayouts(std::vector<CBetOut>& vExpectedPayouts, CAmount& nMNBetReward, std::vector<CPayoutInfo>& vPayoutsInfo)
 {
     CAmount profitAcc = 0;
     CAmount nPayout = 0;
     CAmount totalAmountBet = 0;
+    UniversalBetKey zeroKey{0, COutPoint()};
 
     // Set the OMNO and Dev reward addresses
     std::string devPayoutAddr  = Params().DevPayoutAddr();
@@ -995,8 +1003,9 @@ int64_t GetBlockPayouts(std::vector<CBetOut>& vExpectedPayouts, CAmount& nMNBetR
 
         // Add both reward payouts to the payout vector.
         vExpectedPayouts.emplace_back(nDevReward, GetScriptForDestination(CBitcoinAddress(devPayoutAddr).Get()));
+        vPayoutsInfo.emplace_back(zeroKey, PayoutType::bettingReward);
         vExpectedPayouts.emplace_back(nOMNOReward, GetScriptForDestination(CBitcoinAddress(OMNOPayoutAddr).Get()));
-
+        vPayoutsInfo.emplace_back(zeroKey, PayoutType::bettingReward);
         nPayout += nDevReward + nOMNOReward;
     }
 
@@ -1029,7 +1038,7 @@ int64_t GetCGBlockPayouts(std::vector<CBetOut>& vexpectedCGPayouts, CAmount& nMN
  * @param nHeight - The current chain height.
  * @return
  */
-bool IsBlockPayoutsValid(std::vector<CBetOut> vExpectedPayouts, CBlock block)
+bool IsBlockPayoutsValid(CBettingsView &bettingsViewCache, const std::vector<CBetOut>& vExpectedPayouts, CBlock block, int nBlockHeight, const std::vector<CPayoutInfo>& vExpectedPayoutsInfo)
 {
     unsigned long size = vExpectedPayouts.size();
 
@@ -1086,7 +1095,8 @@ bool IsBlockPayoutsValid(std::vector<CBetOut> vExpectedPayouts, CBlock block)
 
             const CTxOut &txout = tx.vout[i];
             CAmount voutValue   = txout.nValue;
-            CAmount vExpected   = vExpectedPayouts[i - numStakingTx].nValue;
+            CAmount vExpected   = vExpectedPayouts[j].nValue;
+            PayoutInfoKey payoutInfoKey{static_cast<uint32_t>(nBlockHeight), COutPoint{tx.GetHash(), static_cast<uint32_t>(i)}};
 
             LogPrintf("Bet Amount %li  - Expected Bet Amount: %li \n", voutValue, vExpected);
 
@@ -1097,7 +1107,7 @@ bool IsBlockPayoutsValid(std::vector<CBetOut> vExpectedPayouts, CBlock block)
 
             // Get the expected payout address.
             CTxDestination expectedAddr;
-            ExtractDestination(vExpectedPayouts[i - numStakingTx].scriptPubKey, expectedAddr);
+            ExtractDestination(vExpectedPayouts[j].scriptPubKey, expectedAddr);
             std::string expectedAddrS = CBitcoinAddress(expectedAddr).ToString();
 
             LogPrintf("Bet Address %s  - Expected Bet Address: %s \n", betAddrS.c_str(), expectedAddrS.c_str());
@@ -1106,6 +1116,8 @@ bool IsBlockPayoutsValid(std::vector<CBetOut> vExpectedPayouts, CBlock block)
                 LogPrintf("Validation failed! \n");
                 return false;
             }
+            // write payout info to DB
+            bettingsViewCache.payoutsInfo->Write(payoutInfoKey, vExpectedPayoutsInfo[j]);
         }
     }
 
@@ -1153,7 +1165,7 @@ std::vector<CPeerlessResult> getEventResults( int height )
                         continue;
                     }
 
-                    LogPrintf("Results found...\n");
+                    LogPrintf("Result for event %lu was found...\n", plResult.nEventId);
 
                     // Store the result if its a valid result OP CODE.
                     results.push_back(plResult);
@@ -1228,8 +1240,8 @@ std::pair<std::vector<CChainGamesResult>,std::vector<std::string>> getCGLottoEve
 bool UndoBetPayouts(CBettingsView &bettingsViewCache, int height)
 {
     int nCurrentHeight = chainActive.Height();
-    // Get all the results posted in the latest block.
-    std::vector<CPeerlessResult> results = getEventResults(height);
+    // Get all the results posted in the previous block.
+    std::vector<CPeerlessResult> results = getEventResults(height - 1);
 
     LogPrintf("Start undo payouts...\n");
 
@@ -1264,7 +1276,6 @@ bool UndoBetPayouts(CBettingsView &bettingsViewCache, int height)
                     // find all results for all legs
                     for (int idx = 0; idx < uniBet.legs.size(); idx++) {
                         CPeerlessBet &leg = uniBet.legs[idx];
-                        CPeerlessEvent &lockedEvent = uniBet.lockedEvents[idx];
                         // skip this bet if incompleted (can't find one result)
                         CPeerlessResult res;
                         if (!bettingsViewCache.results->Read(ResultKey{leg.nEventId}, res)) {
@@ -1276,7 +1287,6 @@ bool UndoBetPayouts(CBettingsView &bettingsViewCache, int height)
             // single bet
             else if (uniBet.legs.size() == 1) {
                 CPeerlessBet &singleBet = uniBet.legs[0];
-                CPeerlessEvent &lockedEvent = uniBet.lockedEvents[0];
                 if (singleBet.nEventId == result.nEventId) {
                     needUndo = true;
                 }
@@ -1319,26 +1329,50 @@ uint32_t GetBetOdds(const CPeerlessBet &bet, const CPeerlessEvent &lockedEvent, 
             break;
         case spreadHome:
             if (result.nResultType == ResultType::spreadsRefund || lockedEvent.nSpreadHomeOdds == 0) return oddsDivisor;
-            if (spreadDiff == lockedEvent.nSpreadPoints) return oddsDivisor;
-            if (homeFavorite) {
-                // mean bet to home will win with spread
-                if (spreadDiff > lockedEvent.nSpreadPoints) return lockedEvent.nSpreadHomeOdds;
+            if (lockedEvent.nSpreadVersion == 1) {
+                if (spreadDiff == lockedEvent.nSpreadPoints) return oddsDivisor;
+                if (homeFavorite) {
+                    // mean bet to home will win with spread
+                    if (spreadDiff > lockedEvent.nSpreadPoints) return lockedEvent.nSpreadHomeOdds;
+                }
+                else {
+                    // mean bet to home will not lose with spread
+                    if (spreadDiff < lockedEvent.nSpreadPoints) return lockedEvent.nSpreadHomeOdds;
+                }
             }
-            else {
-                // mean bet to home will not lose with spread
-                if (spreadDiff < lockedEvent.nSpreadPoints) return lockedEvent.nSpreadHomeOdds;
+            else { // lockedEvent.nSpreadVersion == 2
+                int32_t difference = result.nHomeScore - result.nAwayScore;
+                if (lockedEvent.nSpreadPoints < difference) {
+                    return lockedEvent.nSpreadHomeOdds;
+                } else if (lockedEvent.nSpreadPoints > difference) {
+                    return lockedEvent.nSpreadAwayOdds;
+                } else {
+                    return oddsDivisor;
+                }
             }
             break;
         case spreadAway:
             if (result.nResultType == ResultType::spreadsRefund || lockedEvent.nSpreadAwayOdds == 0) return oddsDivisor;
-            if (spreadDiff == lockedEvent.nSpreadPoints) return oddsDivisor;
-            if (homeFavorite) {
-                // mean that bet to away will not lose with spread
-                if (spreadDiff < lockedEvent.nSpreadPoints) return lockedEvent.nSpreadAwayOdds;
+            if (lockedEvent.nSpreadVersion == 1) {
+                if (spreadDiff == lockedEvent.nSpreadPoints) return oddsDivisor;
+                if (homeFavorite) {
+                    // mean that bet to away will not lose with spread
+                    if (spreadDiff < lockedEvent.nSpreadPoints) return lockedEvent.nSpreadAwayOdds;
+                }
+                else {
+                    // mean that bet to away will win with spread
+                    if (spreadDiff > lockedEvent.nSpreadPoints) return lockedEvent.nSpreadAwayOdds;
+                }
             }
-            else {
-                // mean that bet to away will win with spread
-                if (spreadDiff > lockedEvent.nSpreadPoints) return lockedEvent.nSpreadAwayOdds;
+            else { // lockedEvent.nSpreadVersion == 2
+                int32_t difference = result.nHomeScore - result.nAwayScore;
+                if (lockedEvent.nSpreadPoints < difference) {
+                    return lockedEvent.nSpreadHomeOdds;
+                } else if (lockedEvent.nSpreadPoints > difference) {
+                    return lockedEvent.nSpreadAwayOdds;
+                } else {
+                    return oddsDivisor;
+                }
             }
             break;
         case totalOver:
@@ -1361,11 +1395,10 @@ uint32_t GetBetOdds(const CPeerlessBet &bet, const CPeerlessEvent &lockedEvent, 
 /**
  * Creates the bet payout vector for all winning CUniversalBet bets.
  *
- * @return payout vector.
+ * @return payout vector, payouts info vector.
  */
-std::vector<CBetOut> GetBetPayouts(CBettingsView &bettingsViewCache, int height)
+void GetBetPayouts(CBettingsView &bettingsViewCache, int height, std::vector<CBetOut>& vExpectedPayouts, std::vector<CPayoutInfo>& vPayoutsInfo)
 {
-    std::vector<CBetOut> vExpectedPayouts;
     int nCurrentHeight = chainActive.Height();
     uint64_t oddsDivisor{Params().OddsDivisor()};
     uint64_t betXPermille{Params().BetXPermille()};
@@ -1373,6 +1406,9 @@ std::vector<CBetOut> GetBetPayouts(CBettingsView &bettingsViewCache, int height)
     std::vector<CPeerlessResult> results = getEventResults(height);
 
     LogPrintf("Start generating payouts...\n");
+
+    vExpectedPayouts.clear();
+    vPayoutsInfo.clear();
 
     for (auto result : results) {
 
@@ -1452,6 +1488,7 @@ std::vector<CBetOut> GetBetPayouts(CBettingsView &bettingsViewCache, int height)
                 if (payout > 0) {
                     // Add winning payout to the payouts vector.
                     vExpectedPayouts.emplace_back(payout, GetScriptForDestination(uniBet.playerAddress.Get()), uniBet.betAmount);
+                    vPayoutsInfo.emplace_back(uniBetKey, odds == oddsDivisor ? PayoutType::bettingRefund : PayoutType::bettingPayout);
                 }
                 LogPrintf("\nBet %s is handled!\nPlayer address: %s\nPayout: %ll\n\n", uniBet.betOutPoint.ToStringShort(), uniBet.playerAddress.ToString(), payout);
                 // if handling bet is completed - mark it
@@ -1460,7 +1497,6 @@ std::vector<CBetOut> GetBetPayouts(CBettingsView &bettingsViewCache, int height)
             }
         }
     }
-    return vExpectedPayouts;
 }
 
 // TODO function will need to be refactored and cleaned up at a later stage as we have had to make rapid and frequent code changes.
@@ -1469,9 +1505,8 @@ std::vector<CBetOut> GetBetPayouts(CBettingsView &bettingsViewCache, int height)
  *
  * @return payout vector.
  */
-std::vector<CBetOut> GetBetPayoutsLegacy(int height)
+void GetBetPayoutsLegacy(int height, std::vector<CBetOut>& vExpectedPayouts, std::vector<CPayoutInfo>& vPayoutsInfo)
 {
-    std::vector<CBetOut> vExpectedPayouts;
     int nCurrentHeight = chainActive.Height();
 
     // Get all the results posted in the latest block.
@@ -1496,7 +1531,7 @@ std::vector<CBetOut> GetBetPayoutsLegacy(int height)
         uint64_t nSpreadsOdds       = 0;
         uint64_t nTotalsOdds        = 0;
         uint64_t nTotalsPoints      = result.nHomeScore + result.nAwayScore;
-        uint64_t nSpreadsDifference = 0;
+        int64_t nSpreadsDifference = 0;
         bool HomeFavorite               = false;
 
         // We keep temp values as we can't be sure of the order of the TX's being stored in a block.
@@ -1533,6 +1568,7 @@ std::vector<CBetOut> GetBetPayoutsLegacy(int height)
             CBlock block;
             ReadBlockFromDisk(block, BlocksIndex);
             time_t transactionTime = block.nTime;
+            uint32_t nHeight = BlocksIndex->nHeight;
 
             for (CTransaction &tx : block.vtx) {
                 // Check all TX vouts for an OP RETURN.
@@ -1627,36 +1663,51 @@ std::vector<CBetOut> GetBetPayoutsLegacy(int height)
 
                             UpdateSpreads = true;
 
-                            // If the home team is the favourite.
-                            if (HomeFavorite){
-                                //  Choose the spreads winner.
-                                if (nSpreadsDifference == 0) {
-                                    nSpreadsWinner = WinnerType::awayWin;
+                            if (pse.nVersion == 1) {
+                                // If the home team is the favourite.
+                                if (HomeFavorite){
+                                    //  Choose the spreads winner.
+                                    if (nSpreadsDifference == 0) {
+                                        nSpreadsWinner = WinnerType::awayWin;
+                                    }
+                                    else if (pse.nPoints < nSpreadsDifference) {
+                                        nSpreadsWinner = WinnerType::homeWin;
+                                    }
+                                    else if (pse.nPoints > nSpreadsDifference) {
+                                        nSpreadsWinner = WinnerType::awayWin;
+                                    }
+                                    else {
+                                        nSpreadsWinner = WinnerType::push;
+                                    }
                                 }
-                                else if (pse.nPoints < nSpreadsDifference) {
-                                    nSpreadsWinner = WinnerType::homeWin;
-                                }
-                                else if (pse.nPoints > nSpreadsDifference) {
-                                    nSpreadsWinner = WinnerType::awayWin;
-                                }
+                                // If the away team is the favourite.
                                 else {
-                                    nSpreadsWinner = WinnerType::push;
+                                    // Cho0se the winner.
+                                    if (nSpreadsDifference == 0) {
+                                        nSpreadsWinner = WinnerType::homeWin;
+                                    }
+                                    else if (pse.nPoints > nSpreadsDifference) {
+                                        nSpreadsWinner = WinnerType::homeWin;
+                                    }
+                                    else if (pse.nPoints < nSpreadsDifference) {
+                                        nSpreadsWinner = WinnerType::awayWin;
+                                    }
+                                    else {
+                                        nSpreadsWinner = WinnerType::push;
+                                    }
                                 }
-                            }
-                            // If the away team is the favourite.
-                            else {
-                                // Cho0se the winner.
-                                if (nSpreadsDifference == 0) {
-                                    nSpreadsWinner = WinnerType::homeWin;
-                                }
-                                else if (pse.nPoints > nSpreadsDifference) {
-                                    nSpreadsWinner = WinnerType::homeWin;
-                                }
-                                else if (pse.nPoints < nSpreadsDifference) {
-                                    nSpreadsWinner = WinnerType::awayWin;
-                                }
-                                else {
-                                    nSpreadsWinner = WinnerType::push;
+                            } else { // if (nVersion == 2)
+                                if (nSpreadsDifference == 0) {  // This seems redundant
+                                    nSpreadsWinner = HomeFavorite ? WinnerType::awayWin : WinnerType::homeWin;
+                                } else {
+                                    int32_t difference = result.nHomeScore - result.nAwayScore;
+                                    if (pse.nPoints < difference) {
+                                        nSpreadsWinner = WinnerType::homeWin;
+                                    } else if (pse.nPoints > difference) {
+                                        nSpreadsWinner = WinnerType::awayWin;
+                                    } else { // if (pse.nPoints = difference)
+                                        nSpreadsWinner = WinnerType::push;
+                                    }
                                 }
                             }
 
@@ -1709,7 +1760,7 @@ std::vector<CBetOut> GetBetPayoutsLegacy(int height)
 
                             LogPrintf("Result found ending search \n");
 
-                            return vExpectedPayouts;
+                            return;
                         }
 
                         // Only payout bets that are between 25 - 10000 WRG inclusive (MaxBetPayoutRange).
@@ -1718,6 +1769,8 @@ std::vector<CBetOut> GetBetPayoutsLegacy(int height)
                             // Bet OP RETURN transaction.
                             CPeerlessBet pb;
                             if (CPeerlessBet::FromOpCode(opCode, pb)) {
+
+                                UniversalBetKey betKey{nHeight, COutPoint(tx.GetHash(), i)};
 
                                 CAmount payout = 0 * COIN;
 
@@ -1804,6 +1857,8 @@ std::vector<CBetOut> GetBetPayoutsLegacy(int height)
                                     // Only add valid payouts to the vector.
                                     if (payout > 0) {
                                         // Add winning bet payout to the bet vector.
+                                        bool refund = (payout == betAmount * oddsDivisor) ? true : false;
+                                        vPayoutsInfo.emplace_back(betKey, refund ? PayoutType::bettingRefund : PayoutType::bettingPayout);
                                         vExpectedPayouts.emplace_back(payout, GetScriptForDestination(CBitcoinAddress(payoutAddress).Get()), betAmount);
                                     }
                                 }
@@ -1875,7 +1930,7 @@ std::vector<CBetOut> GetBetPayoutsLegacy(int height)
         }
     }
 
-    return vExpectedPayouts;
+    return;
 }
 
 /**
@@ -1883,9 +1938,8 @@ std::vector<CBetOut> GetBetPayoutsLegacy(int height)
  *
  * @return payout vector.
  */
-std::vector<CBetOut> GetCGLottoBetPayouts (int height)
+void GetCGLottoBetPayouts (int height, std::vector<CBetOut>& vexpectedCGLottoBetPayouts, std::vector<CPayoutInfo>& vPayoutsInfo)
 {
-    std::vector<CBetOut> vexpectedCGLottoBetPayouts;
     int nCurrentHeight = chainActive.Height();
     long long totalValueOfBlock = 0;
 
@@ -1903,7 +1957,7 @@ std::vector<CBetOut> GetCGLottoBetPayouts (int height)
         totalValueOfBlock = stoll(blockSizeArray[0]);
 
         //reset total bet amount and candidate array for this event
-        std::vector<std::string> candidates;
+        std::vector<std::pair<std::string, UniversalBetKey>> candidates;
         CAmount totalBetAmount = 0 * COIN;
 
         // Look back the chain 10 days for any events and bets.
@@ -1929,6 +1983,8 @@ std::vector<CBetOut> GetCGLottoBetPayouts (int height)
                 uint256 hashBlock;
                 CTransaction txPrev;
 
+                uint256 txHash = tx.GetHash();
+
                 bool validTX = IsValidOracleTx(txin);
 
                 // Check all TX vouts for an OP RETURN.
@@ -1937,6 +1993,8 @@ std::vector<CBetOut> GetCGLottoBetPayouts (int height)
                     const CTxOut &txout = tx.vout[i];
                     std::string scriptPubKey = txout.scriptPubKey.ToString();
                     CAmount betAmount = txout.nValue;
+
+                    UniversalBetKey betKey{static_cast<uint32_t>(BlocksIndex->nHeight), COutPoint{txHash, static_cast<uint32_t>(i)}};
 
                     if (scriptPubKey.length() > 0 && 0 == strncmp(scriptPubKey.c_str(), "OP_RETURN", 9)) {
                         // Get the OP CODE from the transaction scriptPubKey.
@@ -1981,7 +2039,7 @@ std::vector<CBetOut> GetCGLottoBetPayouts (int height)
                                     }
 
                                     // Add the payout address of each candidate to array
-                                    candidates.push_back(CBitcoinAddress( payoutAddress ).ToString().c_str());
+                                    candidates.push_back(std::pair<std::string, UniversalBetKey>{CBitcoinAddress( payoutAddress ).ToString().c_str(), betKey});
                                 }
                             }
                         }
@@ -2004,7 +2062,7 @@ std::vector<CBetOut> GetCGLottoBetPayouts (int height)
         if (candidates.size() == 1) {
              // Refund the single entrant.
              CAmount noOfBets = candidates.size();
-             std::string winnerAddress = candidates[0];
+             std::string winnerAddress = candidates[0].first;
              CAmount entranceFee = eventFee;
              CAmount winnerPayout = eventFee;
 
@@ -2015,6 +2073,7 @@ std::vector<CBetOut> GetCGLottoBetPayouts (int height)
 
              // Only add valid payouts to the vector.
              if (winnerPayout > 0) {
+                 vPayoutsInfo.emplace_back(candidates[0].second, PayoutType::chainGamesRefund);
                  vexpectedCGLottoBetPayouts.emplace_back(winnerPayout, GetScriptForDestination(CBitcoinAddress(winnerAddress).Get()), entranceFee, allChainGames[currResult].nEventId);
              }
         }
@@ -2031,7 +2090,7 @@ std::vector<CBetOut> GetCGLottoBetPayouts (int height)
             uint64_t winnerNr = tempVal.Get64();
 
             // Split the pot and calculate winnings.
-            std::string winnerAddress = candidates[winnerNr];
+            std::string winnerAddress = candidates[winnerNr].first;
             CAmount entranceFee = eventFee;
             CAmount totalPot = hashProofOfStake == 0 ? 0 : (noOfBets*entranceFee);
             CAmount winnerPayout = totalPot / 10 * 8;
@@ -2045,13 +2104,14 @@ std::vector<CBetOut> GetCGLottoBetPayouts (int height)
 
             // Only add valid payouts to the vector.
             if (winnerPayout > 0) {
+                UniversalBetKey zeroKey{0, COutPoint()};
+                vPayoutsInfo.emplace_back(candidates[winnerNr].second, PayoutType::chainGamesPayout);
                 vexpectedCGLottoBetPayouts.emplace_back(winnerPayout, GetScriptForDestination(CBitcoinAddress(winnerAddress).Get()), entranceFee, allChainGames[currResult].nEventId);
+                vPayoutsInfo.emplace_back(zeroKey, PayoutType::chainGamesPayout);
                 vexpectedCGLottoBetPayouts.emplace_back(fee, GetScriptForDestination(CBitcoinAddress(Params().OMNOPayoutAddr()).Get()), entranceFee);
             }
         }
     }
-
-    return vexpectedCGLottoBetPayouts;
 }
 
 bool CheckBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, const int height)
@@ -2447,6 +2507,7 @@ void ParseBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, co
                         // save prev event state to undo
                         bettingsViewCache.SaveBettingUndo(undoId, {CBettingUndo{BettingUndoVariant{plEvent}, (uint32_t)height}});
 
+                        plEvent.nSpreadVersion   = spreadEvent.nVersion;
                         plEvent.nSpreadPoints    = spreadEvent.nPoints;
                         plEvent.nSpreadHomeOdds  = spreadEvent.nHomeOdds;
                         plEvent.nSpreadAwayOdds  = spreadEvent.nAwayOdds;
@@ -2543,7 +2604,7 @@ bool UndoBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, con
 
     LogPrintf("UndoBettingTx: start undo, block heigth %lu, tx hash %s\n", height, tx.GetHash().GetHex());
 
-    bool parlayBetsAvaible = height > Params().ParlayBetStartHeight();
+    bool parlayBetsAvaible = height >= Params().ParlayBetStartHeight();
 
     // First revert OMNO transactions
     if (validOracleTx) {
@@ -2594,7 +2655,6 @@ bool UndoBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, con
                 // If event patch - find event undo and revert changes
                 CPeerlessEventPatch plEventPatch{};
                 if (CPeerlessEventPatch::FromOpCode(opCode, plEventPatch)) {
-                    EventKey eventKey{plEventPatch.nEventId};
                     LogPrintf("CPeerlessEventPatch: id: %lu, time: %lu\n", plEventPatch.nEventId, plEventPatch.nStartTime);
                     if (!UndoEventChanges(bettingsViewCache, undoId, height)) {
                         LogPrintf("Revert failed!\n");
@@ -2618,7 +2678,6 @@ bool UndoBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, con
                 // If update money line odds - find event undo and revert changes
                 CPeerlessUpdateOdds puo{};
                 if (CPeerlessUpdateOdds::FromOpCode(opCode, puo)) {
-                    EventKey eventKey{puo.nEventId};
                     LogPrintf("CPeerlessUpdateOdds: id: %lu, homeOdds: %lu, awayOdds: %lu, drawOdds: %lu\n", puo.nEventId, puo.nHomeOdds, puo.nAwayOdds, puo.nDrawOdds);
                     if (!UndoEventChanges(bettingsViewCache, undoId, height)) {
                         LogPrintf("Revert failed!\n");
@@ -2630,7 +2689,6 @@ bool UndoBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, con
                 // If spread odds - find event undo and revert changes
                 CPeerlessSpreadsEvent spreadEvent{};
                 if (CPeerlessSpreadsEvent::FromOpCode(opCode, spreadEvent)) {
-                    EventKey eventKey{spreadEvent.nEventId};
                     LogPrintf("CPeerlessSpreadsEvent: id: %lu, spreadPoints: %lu, homeOdds: %lu, awayOdds: %lu\n", spreadEvent.nEventId, spreadEvent.nPoints, spreadEvent.nHomeOdds, spreadEvent.nAwayOdds);
                     if (!UndoEventChanges(bettingsViewCache, undoId, height)) {
                         LogPrintf("Revert failed!\n");
@@ -2642,7 +2700,6 @@ bool UndoBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, con
                 // If total odds - find event undo and revert changes
                 CPeerlessTotalsEvent totalsEvent{};
                 if (CPeerlessTotalsEvent::FromOpCode(opCode, totalsEvent)) {
-                    EventKey eventKey{totalsEvent.nEventId};
                     LogPrintf("CPeerlessTotalsEvent: id: %lu, totalPoints: %lu, overOdds: %lu, underOdds: %lu\n", totalsEvent.nEventId, totalsEvent.nPoints, totalsEvent.nOverOdds, totalsEvent.nUnderOdds);
                     if (!UndoEventChanges(bettingsViewCache, undoId, height)) {
                         LogPrintf("Revert failed!\n");
@@ -2670,7 +2727,6 @@ bool UndoBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, con
             CPeerlessBet plBet;
             // If bet - try to find event undo and revert changes
             if (CPeerlessBet::FromOpCode(opCode, plBet)) {
-                EventKey eventKey{plBet.nEventId};
                 LogPrintf("CPeerlessBet: id: %lu, outcome: %lu\n", plBet.nEventId, plBet.nOutcome);
                 if (!UndoEventChanges(bettingsViewCache, undoId, height)) {
                     LogPrintf("Revert failed!\n");
@@ -2705,5 +2761,30 @@ bool UndoBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, con
         }
     }
     LogPrintf("UndoBettingTx: end\n");
+    return true;
+}
+
+/* Revert payouts info from DB */
+bool UndoPayoutsInfo(CBettingsView &bettingsViewCache, int height)
+{
+    // we should save array of entries to delete because
+    // changing (add/delete) of flushable DB when iterating is not allowed
+    std::vector<PayoutInfoKey> entriesToDelete;
+    auto it = bettingsViewCache.payoutsInfo->NewIterator();
+    for (it->Seek(CBettingDB::DbTypeToBytes(PayoutInfoKey{static_cast<uint32_t>(height), COutPoint()})); it->Valid(); it->Next()) {
+        PayoutInfoKey key;
+        CBettingDB::BytesToDbType(it->Key(), key);
+        if (key.blockHeight != height)
+            break;
+        else
+            entriesToDelete.emplace_back(key);
+    }
+
+    // delete all entries with height of disconnected block
+    for (auto&& key : entriesToDelete) {
+        if (!bettingsViewCache.payoutsInfo->Erase(key))
+            return false;
+    }
+
     return true;
 }
