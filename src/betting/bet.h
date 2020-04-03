@@ -73,7 +73,10 @@ typedef enum PayoutType {
     bettingReward    = 0x03,
     chainGamesPayout = 0x04,
     chainGamesRefund = 0x05,
-    chainGamesReward = 0x06
+    chainGamesReward = 0x06,
+    quickGamesPayout = 0x07,
+    quickGamesRefund = 0x08,
+    quickGamesReward = 0x09
 } PayoutType;
 
 // Class derived from CTxOut
@@ -1019,5 +1022,8 @@ bool UndoBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, con
 
 /* Revert payouts info from DB */
 bool UndoPayoutsInfo(CBettingsView &bettingsViewCache, int height);
+
+/* Creates the bet payout vector for all winning Quick Games bets */
+void GetQuickGamesBetPayouts(CBettingsView& bettingsViewCache, const int height,  std::vector<CBetOut>& vExpectedPayouts, std::vector<CPayoutInfo>& vPayoutsInfo);
 
 #endif // WAGERR_BET_H

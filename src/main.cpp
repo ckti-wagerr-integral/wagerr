@@ -3240,10 +3240,12 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     std::vector<CBetOut> vExpectedAllPayouts;
     std::vector<CBetOut> vExpectedPLPayouts;
     std::vector<CBetOut> vExpectedCGLottoPayouts;
+    std::vector<CBetOut> vExpectedQuickGamesPayouts;
 
     std::vector<CPayoutInfo> vExpectedPLPayoutsInfo;
     std::vector<CPayoutInfo> vExpectedCGLottoPayoutsInfo;
     std::vector<CPayoutInfo> vExpectedAllPayoutsInfo;
+    std::vector<CPayoutInfo> vExpectedQuickGamesPayoutsInfo;
 
     if( pindex->nHeight > Params().BetStartHeight()) {
         std::string strBetNetBlockTxt;
@@ -3277,6 +3279,8 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         }
         GetCGLottoBetPayouts(pindex->nHeight - 1, vExpectedCGLottoPayouts, vExpectedCGLottoPayoutsInfo);
 
+        GetQuickGamesBetPayouts(bettingsViewCache, pindex->nHeight - 1, vExpectedQuickGamesPayouts, vExpectedQuickGamesPayoutsInfo);
+
         // Get the total amount of WGR that needs to be minted to payout all winning bets.
         nExpectedMint += GetBlockPayouts(vExpectedPLPayouts, nMNBetReward, vExpectedPLPayoutsInfo);
         nExpectedMint += GetCGBlockPayouts(vExpectedCGLottoPayouts, nMNBetReward);
@@ -3286,8 +3290,10 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         // Merge vectors into single payout vector.
         vExpectedAllPayouts = vExpectedPLPayouts;
         vExpectedAllPayouts.insert(vExpectedAllPayouts.end(), vExpectedCGLottoPayouts.begin(), vExpectedCGLottoPayouts.end());
+        vExpectedAllPayouts.insert(vExpectedAllPayouts.end(), vExpectedQuickGamesPayouts.begin(), vExpectedQuickGamesPayouts.end());
         vExpectedAllPayoutsInfo = vExpectedPLPayoutsInfo;
         vExpectedAllPayoutsInfo.insert(vExpectedAllPayoutsInfo.end(), vExpectedCGLottoPayoutsInfo.begin(), vExpectedCGLottoPayoutsInfo.end());
+        vExpectedAllPayoutsInfo.insert(vExpectedAllPayoutsInfo.end(), vExpectedQuickGamesPayoutsInfo.begin(), vExpectedQuickGamesPayoutsInfo.end());
     }
 
     // Validate bet payouts nExpectedMint against the block pindex->nMint to ensure reward wont pay to much.
