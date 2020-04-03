@@ -437,6 +437,7 @@ public:
 // OPCODE serialization class
 class CQuickGamesTxBet
 {
+public:
     QuickGamesType gameType;
     std::vector<unsigned char> vBetInfo;
 
@@ -594,7 +595,8 @@ private:
     bool completed = false;
 };
 
-// UndoKey
+// Betting Undo
+
 using BettingUndoKey = uint256;
 
 using BettingUndoVariant = boost::variant<CMapping, CPeerlessEvent, CPeerlessResult>;
@@ -690,6 +692,8 @@ private:
     BettingUndoVariant undoVariant;
 };
 
+// Payout Info
+
 using PayoutInfoKey = UniversalBetKey;
 
 class CPayoutInfo
@@ -720,22 +724,29 @@ public:
     }
 };
 
+// Quick Games
+
 using QuickGamesBetKey = UniversalBetKey;
 
 class CQuickGamesBet
 {
+public:
     QuickGamesType gameType;
     std::vector<unsigned char> vBetInfo;
     CAmount betAmount;
     CBitcoinAddress playerAddress;
-    COutPoint betOutPoint;
     int64_t betTime;
 
     explicit CQuickGamesBet() { }
-    explicit CQuickGamesBet(const QuickGamesType gameType, const std::vector<unsigned char>& vBetInfo, const CAmount betAmount, const CBitcoinAddress& playerAddress, const COutPoint& betOutPoint, const int64_t betTime) :
-        gameType(gameType), vBetInfo(vBetInfo), betAmount(betAmount), playerAddress(playerAddress), betOutPoint(betOutPoint), betTime(betTime) { }
+    explicit CQuickGamesBet(const QuickGamesType gameType, const std::vector<unsigned char>& vBetInfo, const CAmount betAmount, const CBitcoinAddress& playerAddress, const int64_t betTime) :
+        gameType(gameType), vBetInfo(vBetInfo), betAmount(betAmount), playerAddress(playerAddress), betTime(betTime) { }
     explicit CQuickGamesBet(const CQuickGamesBet& cgBet) :
-        gameType(cgBet.gameType), vBetInfo(cgBet.vBetInfo), betAmount(cgBet.betAmount), playerAddress(cgBet.playerAddress), betOutPoint(cgBet.betOutPoint), betTime(cgBet.betTime) { }
+        gameType(cgBet.gameType), vBetInfo(cgBet.vBetInfo), betAmount(cgBet.betAmount), playerAddress(cgBet.playerAddress), betTime(cgBet.betTime) { }
+
+    bool IsCompleted() { return completed; }
+    void SetCompleted() { completed = true; }
+    // for undo
+    void SetUncompleted() { completed = false; }
 
     ADD_SERIALIZE_METHODS;
 
@@ -765,7 +776,11 @@ class CQuickGamesBet
         READWRITE(betOutPoint);
         READWRITE(betTime);
     }
+private:
+    bool completed = false;
 };
+
+// Betting Data Base
 
 class CBettingDB
 {

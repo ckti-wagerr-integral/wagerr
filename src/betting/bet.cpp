@@ -2431,6 +2431,15 @@ void ParseBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, co
                 }
                 continue;
             }
+
+            CQuickGamesTxBet qgTxBet;
+            if (CQuickGamesTxBet::FromOpCode(opCodeHexStr, qgTxBet)) {
+                LogPrintf("CQuickGamesTxBet: gameType: %d, betInfo: %s", qgTxBet.gameType, std::string(qgTxBet.vBetInfo.begin(), qgTxBet.vBetInfo.end()));
+                bettingsViewCache.quickGamesBets->Write(
+                    QuickGamesBetKey{static_cast<uint32_t>(height), out},
+                    CQuickGamesBet{qgTxBet.gameType, qgTxBet.vBetInfo, betAmount, address, blockTime});
+                continue;
+            }
         }
     }
     // If a valid OMNO transaction.
@@ -2794,6 +2803,16 @@ bool UndoBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, con
                     UniversalBetKey key{static_cast<uint32_t>(height), out};
                     bettingsViewCache.bets->Erase(key);
                 }
+                continue;
+            }
+            CQuickGamesTxBet qgTxBet;
+            if (CQuickGamesTxBet::FromOpCode(opCodeHexStr, qgTxBet)) {
+                LogPrintf("CQuickGamesTxBet: gameType: %d, betInfo: %s", qgTxBet.gameType, std::string(qgTxBet.vBetInfo.begin(), qgTxBet.vBetInfo.end()));
+                if (!bettingsViewCache.quickGamesBets->Erase(QuickGamesBetKey{static_cast<uint32_t>(height), out})) {
+                    LogPrintf("Revert failed!\n");
+                    return false;
+                }
+                continue;
             }
         }
     }
