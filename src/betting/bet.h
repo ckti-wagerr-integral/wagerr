@@ -76,10 +76,6 @@ typedef enum PayoutType {
     chainGamesReward = 0x06
 } PayoutType;
 
-typedef enum QuickGamesType {
-    qgDice = 0x01,
-} QuickGamesType;
-
 // Class derived from CTxOut
 // nBetValue is NOT serialized, nor is it included in the hash.
 class CBetOut : public CTxOut {
@@ -773,7 +769,6 @@ public:
             addrStr = playerAddress.ToString();
             READWRITE(addrStr);
         }
-        READWRITE(betOutPoint);
         READWRITE(betTime);
     }
 private:

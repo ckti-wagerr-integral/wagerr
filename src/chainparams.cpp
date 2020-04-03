@@ -16,6 +16,7 @@
 
 #include <boost/assign/list_of.hpp>
 
+#include <clientversion.h>
 
 struct SeedSpec6 {
     uint8_t addr[16];
@@ -125,6 +126,22 @@ bool CChainParams::HasStakeMinAgeOrDepth(const int contextHeight, const uint32_t
     return (contextHeight - utxoFromBlockHeight >= nStakeMinDepth);
 }
 
+uint32_t QuickGamesDice(std::vector<unsigned char>& betInfo, uint256 seed)
+{
+    CDataStream ss{betInfo, SER_NETWORK, CLIENT_VERSION};
+    uint8_t betType;
+    uint32_t betNumber;
+    ss >> betType;
+    if (betType != qgDiceEven || betType != qgDiceOdd) {
+        ss >> betNumber;
+    }
+    uint64_t winNumber = seed.Get64() % 6 + 1;
+
+    if (winNumber == betNumber) return Params().OddsDivisor();
+
+    return 0;
+}
+
 class CMainParams : public CChainParams
 {
 public:
@@ -202,6 +219,13 @@ public:
         nBetPlaceTimeoutBlocks = 120;                                   // Discard bets placed less than 120 seconds (approx. 2 mins) before event start time
         nMaxParlayLegs = 5;                                             // Minimizes maximum legs in parlay bet
         nParlayBetStartHeight = 1000000;                                // TODO: pick block height for enabling parlay betting and new payout system
+
+        quickGamesArr.emplace_back(
+            std::string("Dice"), // Game name
+            QuickGamesType::qgDice, // game type
+            &QuickGamesDice, // game bet handler
+            std::string(""), // Dev address
+            1); // Dev reward permille
 
         // Fake Serial Attack
         nFakeSerialBlockheightEnd = 556623;
@@ -361,6 +385,13 @@ public:
         nMaxParlayLegs = 5;                                             // Minimizes maximum legs in parlay bet
         nParlayBetStartHeight = 100900;                                // TODO: pick block height for enabling parlay betting and new payout system
 
+        quickGamesArr.emplace_back(
+            std::string("Dice"), // Game name
+            QuickGamesType::qgDice, // game type
+            &QuickGamesDice, // game bet handler
+            std::string(""), // Dev address
+            1); // Dev reward permille
+
         // Fake Serial Attack
         nFakeSerialBlockheightEnd = -1;
         nSupplyBeforeFakeSerial = 0;
@@ -478,6 +509,13 @@ public:
         nBetPlaceTimeoutBlocks = 120;                                   // Discard bets placed less than 120 seconds (approx. 2 mins) before event start time,
         nMaxParlayLegs = 5;                                             // Minimizes maximum legs in parlay bet
         nParlayBetStartHeight = nBetStartHeight;                        // TODO: pick block height for enabling parlay betting and new payout system
+
+        quickGamesArr.emplace_back(
+            std::string("Dice"), // Game name
+            QuickGamesType::qgDice, // game type
+            &QuickGamesDice, // game bet handler
+            std::string(""), // Dev address
+            1); // Dev reward permille
 
         // Fake Serial Attack
         nFakeSerialBlockheightEnd = -1;
