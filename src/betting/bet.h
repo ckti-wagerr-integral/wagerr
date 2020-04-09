@@ -1001,6 +1001,8 @@ std::pair<std::vector<CChainGamesResult>,std::vector<std::string>> getCGLottoEve
 void GetBetPayoutsLegacy(int height, std::vector<CBetOut>& vExpectedPayouts, std::vector<CPayoutInfo>& vPayoutsInfo);
 /** Using betting database for handle bets **/
 void GetBetPayouts(CBettingsView &bettingsViewCache, int height, std::vector<CBetOut>& vExpectedPayouts, std::vector<CPayoutInfo>& vPayoutsInfo);
+/** Check winning condition for current bet considering locked event and event result **/
+uint32_t GetBetOdds(const CPeerlessBet &bet, const CPeerlessEvent &lockedEvent, const CPeerlessResult &result);
 /** Undo bets as marked completed when generating payouts **/
 bool UndoBetPayouts(CBettingsView &bettingsViewCache, int height);
 

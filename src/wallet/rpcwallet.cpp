@@ -773,6 +773,41 @@ UniValue getBets(uint32_t maxBets, std::set<std::string> addresses = {}) {
         uValue.push_back(Pair("amount", ValueFromAmount(uniBet.betAmount)));
         uValue.push_back(Pair("time", (uint64_t) uniBet.betTime));
         uValue.push_back(Pair("completed", uniBet.IsCompleted()? "yes" : "no"));
+
+        if (uniBet.IsCompleted()) {
+            uint32_t odds = 0;
+            bool firstOddMultiply = true;
+            uint64_t oddsDivisor{Params().OddsDivisor()};
+            uint64_t betXPermille{Params().BetXPermille()};
+            bool resultNotFound = false;
+            for (uint32_t i = 0; i < uniBet.legs.size(); i++) {
+                auto &leg = uniBet.legs[i];
+                auto &lockedEvent = uniBet.lockedEvents[i];
+                CPeerlessResult res;
+                if (bettingsView->results->Read(ResultKey{leg.nEventId}, res)) {
+                    uint32_t betOdds = 0;
+                    // if bet placed before 2 mins of event started - refund this bet
+                    if (lockedEvent.nStartTime > 0 && uniBet.betTime > (lockedEvent.nStartTime - Params().BetPlaceTimeoutBlocks())) {
+                        betOdds = oddsDivisor;
+                    }
+                    else {
+                        betOdds = GetBetOdds(leg, lockedEvent, res);
+                    }
+                    odds = firstOddMultiply ? (firstOddMultiply = false, betOdds) : static_cast<uint32_t>(((uint64_t) odds * betOdds) / oddsDivisor);
+                } else {
+                    resultNotFound = true;
+                    break ;
+                }
+            }
+            if (resultNotFound) {
+                uValue.push_back(Pair("payout", "result not found"));
+            } else {
+                CAmount winnings = uniBet.betAmount * odds;
+                CAmount payout = winnings > 0 ? (winnings - ((winnings - uniBet.betAmount * oddsDivisor) / 1000 * betXPermille)) / oddsDivisor : 0;
+                uValue.push_back(Pair("payout", ValueFromAmount(payout)));
+            }
+        }
+
         ret.push_back(uValue);
         numberBets++;
     }
