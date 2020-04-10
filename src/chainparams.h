@@ -25,6 +25,45 @@ struct CDNSSeedData {
     CDNSSeedData(const std::string& strName, const std::string& strHost) : name(strName), host(strHost) {}
 };
 
+typedef enum QuickGamesType {
+    qgDice = 0x00,
+} QuickGamesType;
+
+typedef enum QuickGamesDiceBetType {
+    qgDiceEqual = 0x00,
+    qgDiceNotEqual = 0x01,
+    qgDiceTotalOver = 0x02,
+    qgDiceTotalUnder = 0x03,
+    qgDiceEven = 0x04,
+    qgDiceOdd = 0x05
+} QuickGamesDiceBetType;
+
+/* The quick game handler prototype, handles
+ * a quick game bet with an incoming seed (pos hash)
+ * and returns the odds factor which indicate win (more than odds divisor), lose (0) or refund (odds divisor).
+ */
+typedef uint32_t (*const BetHandler)(std::vector<unsigned char>& betInfo, uint256 seed);
+
+/* The quick games framework model */
+class CQuickGamesView
+{
+public:
+    const std::string name;
+    const QuickGamesType type;
+    const BetHandler handler;
+    const std::string specialAddress;
+    const uint32_t devRewardPermille;
+
+    explicit CQuickGamesView() = delete;
+    explicit CQuickGamesView(const std::string name, const QuickGamesType type, BetHandler handler, const std::string specialAddress, const uint32_t devRewardPermille) :
+        name(name), type(type), handler(handler), specialAddress(specialAddress), devRewardPermille(devRewardPermille) { }
+    // move constructor
+    explicit CQuickGamesView(const CQuickGamesView&& view) :
+        name(view.name), type(view.type), handler(view.handler), specialAddress(view.specialAddress), devRewardPermille(view.devRewardPermille) { }
+    // copy constructor
+    explicit CQuickGamesView(const CQuickGamesView& view) = delete;
+};
+
 /**
  * CChainParams defines various tweakable parameters of a given instance of the
  * Wagerr system. There are three: the main network on which people trade goods
@@ -169,6 +208,7 @@ public:
     int BetPlaceTimeoutBlocks() const { return nBetPlaceTimeoutBlocks; }
     int MaxParlayLegs() const { return nMaxParlayLegs; }
     int ParlayBetStartHeight() const { return nParlayBetStartHeight; }
+    const std::vector<CQuickGamesView>& QuickGamesArr() const { return quickGamesArr; }
 
     /** temp worarounds **/
     int ZerocoinCheckTX() const { return nZerocoinCheckTX; }
@@ -269,6 +309,8 @@ protected:
     int nBetPlaceTimeoutBlocks;
     int nMaxParlayLegs;
     int nParlayBetStartHeight;
+
+    std::vector<CQuickGamesView> quickGamesArr;
 
     // workarounds
     int nZerocoinCheckTX;
