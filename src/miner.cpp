@@ -487,8 +487,10 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn, CWallet* pwallet, 
             std::vector<CTxOut> vAllBetTxOuts;
             std::vector<CBetOut> vPLPayouts;
             std::vector<CBetOut> vCGLottoPayouts;
+            std::vector<CBetOut> vQuickGamesPayouts;
             std::vector<CPayoutInfo> vPLPayoutsInfo;
             std::vector<CPayoutInfo> vCGLottoPayoutsInfo;
+            std::vector<CPayoutInfo> vQuickGamesPayoutsInfo;
             std::vector<CPayoutInfo> vAllPayoutsInfo;
             CAmount nMNBetReward = 0;
 
@@ -501,6 +503,7 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn, CWallet* pwallet, 
                     GetBetPayoutsLegacy(nHeight - 1, vPLPayouts, vPLPayoutsInfo);
                 }
                 GetCGLottoBetPayouts(nHeight - 1, vCGLottoPayouts, vCGLottoPayoutsInfo);
+                GetQuickGamesBetPayouts(bettingsViewCache, nHeight - 1, vQuickGamesPayouts, vQuickGamesPayoutsInfo);
 
                 GetBlockPayouts(vPLPayouts, nMNBetReward, vPLPayoutsInfo);
                 GetCGBlockPayouts(vCGLottoPayouts, nMNBetReward);
@@ -512,6 +515,9 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn, CWallet* pwallet, 
                 for (auto vCGLottoPayout : vCGLottoPayouts) {
                     vAllBetTxOuts.emplace_back(vCGLottoPayout.nValue, vCGLottoPayout.scriptPubKey);
                 }
+                for (auto vQuickGamesPayout : vQuickGamesPayouts) {
+                    vAllBetTxOuts.emplace_back(vQuickGamesPayout.nValue, vQuickGamesPayout.scriptPubKey);
+                }
 
                 // merge vectors into single payout info vector
                 for (auto&& vPLPayoutInfo : vPLPayoutsInfo) {
@@ -519,6 +525,9 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn, CWallet* pwallet, 
                 }
                 for (auto&& vCGLottoPayoutInfo : vCGLottoPayoutsInfo) {
                     vAllPayoutsInfo.emplace_back(vCGLottoPayoutInfo.betKey, vCGLottoPayoutInfo.payoutType);
+                }
+                for (auto&& vQuickGamesPayoutInfo : vQuickGamesPayoutsInfo) {
+                    vAllPayoutsInfo.emplace_back(vQuickGamesPayoutInfo.betKey, vQuickGamesPayoutInfo.payoutType);
                 }
             }
 
