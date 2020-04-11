@@ -953,7 +953,7 @@ bool CQuickGamesTxBet::FromOpCode(std::string opCode, CQuickGamesTxBet &bet)
     // get BTX format version
     ss >> byte;
     if (byte != (uint8_t) BTX_FORMAT_VERSION) return false;
-    // get parlay bet tx type
+    // get quick games bet tx type
     ss >> byte;
     if (byte != (uint8_t) qgBetTxType) return false;
     // get bet data
@@ -2159,7 +2159,6 @@ void GetCGLottoBetPayouts (int height, std::vector<CBetOut>& vexpectedCGLottoBet
 void GetQuickGamesBetPayouts(CBettingsView& bettingsViewCache, const int height,  std::vector<CBetOut>& vExpectedPayouts, std::vector<CPayoutInfo>& vPayoutsInfo)
 {
     uint64_t oddsDivisor{Params().OddsDivisor()};
-    uint64_t betXPermille{Params().BetXPermille()};
     UniversalBetKey zeroKey{0, COutPoint()};
 
     LogPrintf("Start generating quick games bets payouts...");
@@ -2190,17 +2189,24 @@ void GetQuickGamesBetPayouts(CBettingsView& bettingsViewCache, const int height,
         const CQuickGamesView& gameView = Params().QuickGamesArr()[qgBet.gameType];
         // if odds == 0 - bet lose, if odds > OddsDivisor - bet win, if odds == OddsDivisor - bet refunded
         uint32_t odds = gameView.handler(qgBet.vBetInfo, blockIndex->hashProofOfStake);
-        CAmount winnings = qgBet.betAmount * odds;
-        CAmount payout = winnings > 0 ? (winnings - ((winnings - qgBet.betAmount * oddsDivisor) / 1000 * betXPermille)) / oddsDivisor : 0;
+        CAmount winningsPermille = qgBet.betAmount * odds;
+        CAmount feePermille = winningsPermille > 0 ? (qgBet.betAmount * (odds - oddsDivisor) / 1000 * gameView.nFeePermille) : 0;
+        CAmount payout = winningsPermille > 0 ? (winningsPermille - feePermille) / oddsDivisor : 0;
 
         if (payout > 0) {
             // Add winning payout to the payouts vector.
             vExpectedPayouts.emplace_back(payout, GetScriptForDestination(qgBet.playerAddress.Get()), qgBet.betAmount);
             vPayoutsInfo.emplace_back(qgKey, odds == oddsDivisor ? PayoutType::quickGamesRefund : PayoutType::quickGamesPayout);
-            // Dev reward
-            CAmount reward = (CAmount)((qgBet.betAmount - payout) * gameView.devRewardPermille / (1000.0 - Params().BetXPermille()));
-            vExpectedPayouts.emplace_back(reward, GetScriptForDestination(CBitcoinAddress(gameView.specialAddress).Get()), qgBet.betAmount);
+           // Dev reward
+            CAmount devReward = (CAmount)(feePermille / 1000 * gameView.nDevRewardPermille / oddsDivisor);
+            vExpectedPayouts.emplace_back(devReward, GetScriptForDestination(CBitcoinAddress(gameView.specialAddress).Get()), qgBet.betAmount);
             vPayoutsInfo.emplace_back(zeroKey, PayoutType::quickGamesReward);
+            // OMNO reward
+            std::string OMNOPayoutAddr = Params().OMNOPayoutAddr();
+            CAmount nOMNOReward = (CAmount)(feePermille / 1000 * gameView.nOMNORewardPermille / oddsDivisor);
+            vExpectedPayouts.emplace_back(nOMNOReward, GetScriptForDestination(CBitcoinAddress(OMNOPayoutAddr).Get()), qgBet.betAmount);
+            vPayoutsInfo.emplace_back(zeroKey, PayoutType::quickGamesReward);
+
         }
         LogPrintf("\nQuick game: %s, bet %s is handled!\nPlayer address: %s\nPayout: %ll\n\n", gameView.name, qgKey.outPoint.ToStringShort(), qgBet.playerAddress.ToString(), payout);
         // if handling bet is completed - mark it
