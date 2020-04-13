@@ -9,6 +9,7 @@
 #ifndef BITCOIN_CHAINPARAMS_H
 #define BITCOIN_CHAINPARAMS_H
 
+#include "betting/quickgames/qgview.h"
 #include "chainparamsbase.h"
 #include "checkpoints.h"
 #include "primitives/block.h"
@@ -23,47 +24,6 @@ typedef unsigned char MessageStartChars[MESSAGE_START_SIZE];
 struct CDNSSeedData {
     std::string name, host;
     CDNSSeedData(const std::string& strName, const std::string& strHost) : name(strName), host(strHost) {}
-};
-
-typedef enum QuickGamesType {
-    qgDice = 0x00,
-} QuickGamesType;
-
-typedef enum QuickGamesDiceBetType {
-    qgDiceEqual = 0x00,
-    qgDiceNotEqual = 0x01,
-    qgDiceTotalOver = 0x02,
-    qgDiceTotalUnder = 0x03,
-    qgDiceEven = 0x04,
-    qgDiceOdd = 0x05
-} QuickGamesDiceBetType;
-
-/* The quick game handler prototype, handles
- * a quick game bet with an incoming seed (pos hash)
- * and returns the odds factor which indicate win (more than odds divisor), lose (0) or refund (odds divisor).
- */
-typedef uint32_t (*const BetHandler)(std::vector<unsigned char>& betInfo, uint256 seed);
-
-/* The quick games framework model */
-class CQuickGamesView
-{
-public:
-    const std::string name;
-    const QuickGamesType type;
-    const BetHandler handler;
-    const std::string specialAddress;
-    const uint32_t nFeePermille = 10; // 1%
-    const uint32_t nDevRewardPermille;
-    const uint32_t nOMNORewardPermille;
-
-    explicit CQuickGamesView() = delete;
-    explicit CQuickGamesView(const std::string name, const QuickGamesType type, BetHandler handler, const std::string specialAddress, const uint32_t nOMNORewardPermille, const uint32_t nDevRewardPermille) :
-        name(name), type(type), handler(handler), specialAddress(specialAddress), nOMNORewardPermille(nOMNORewardPermille), nDevRewardPermille(nDevRewardPermille) { }
-    // move constructor
-    explicit CQuickGamesView(const CQuickGamesView&& view) :
-        name(view.name), type(view.type), handler(view.handler), specialAddress(view.specialAddress), nFeePermille(view.nFeePermille), nOMNORewardPermille(view.nOMNORewardPermille),  nDevRewardPermille(view.nDevRewardPermille) { }
-    // copy constructor
-    explicit CQuickGamesView(const CQuickGamesView& view) = delete;
 };
 
 /**

@@ -83,6 +83,8 @@ BITCOIN_CORE_H = \
   amount.h \
   base58.h \
   betting/bet.h \
+  betting/quickgames/dice.h \
+  betting/quickgames/quickgamesview.h \
   bip38.h \
   bloom.h \
   blocksignature.h \
@@ -371,6 +373,7 @@ libbitcoin_common_a_SOURCES = \
   allocators.cpp \
   amount.cpp \
   base58.cpp \
+  betting/quickgames/dice.cpp \
   bip38.cpp \
   chainparams.cpp \
   coins.cpp \
