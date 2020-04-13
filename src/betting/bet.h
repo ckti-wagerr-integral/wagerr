@@ -79,6 +79,13 @@ typedef enum PayoutType {
     quickGamesReward = 0x09
 } PayoutType;
 
+typedef enum BetResultType {
+    betResultUnknown = 0x00,
+    betResultWin = 0x01,
+    betResultLose = 0x02,
+    betResultRefund = 0x03,
+} BetResultType;
+
 // Class derived from CTxOut
 // nBetValue is NOT serialized, nor is it included in the hash.
 class CBetOut : public CTxOut {
@@ -549,6 +556,8 @@ public:
     std::vector<CPeerlessEvent> lockedEvents;
     COutPoint betOutPoint;
     int64_t betTime;
+    BetResultType resultType = BetResultType::betResultUnknown;
+    CAmount payout = 0;
 
     explicit CUniversalBet() { }
     explicit CUniversalBet(const CAmount amount, const CBitcoinAddress address, const std::vector<CPeerlessBet> vLegs, const std::vector<CPeerlessEvent> vEvents, const COutPoint outPoint, const int64_t time) :
@@ -562,6 +571,8 @@ public:
         betOutPoint = bet.betOutPoint;
         betTime = bet.betTime;
         completed = bet.completed;
+        resultType = bet.resultType;
+        payout = bet.payout;
     }
 
     bool IsCompleted() { return completed; }
@@ -588,6 +599,16 @@ public:
         READWRITE(betOutPoint);
         READWRITE(betTime);
         READWRITE(completed);
+        uint8_t resType;
+        if (ser_action.ForRead()) {
+            READWRITE(resType);
+            resultType = (BetResultType) resType;
+        }
+        else {
+            resType = (uint8_t) resultType;
+            READWRITE(resType);
+        }
+        READWRITE(payout);
     }
 
 private:
@@ -735,12 +756,14 @@ public:
     CAmount betAmount;
     CBitcoinAddress playerAddress;
     int64_t betTime;
+    BetResultType resultType = BetResultType::betResultUnknown;
+    CAmount payout = 0;
 
     explicit CQuickGamesBet() { }
     explicit CQuickGamesBet(const QuickGamesType gameType, const std::vector<unsigned char>& vBetInfo, const CAmount betAmount, const CBitcoinAddress& playerAddress, const int64_t betTime) :
         gameType(gameType), vBetInfo(vBetInfo), betAmount(betAmount), playerAddress(playerAddress), betTime(betTime) { }
     explicit CQuickGamesBet(const CQuickGamesBet& cgBet) :
-        gameType(cgBet.gameType), vBetInfo(cgBet.vBetInfo), betAmount(cgBet.betAmount), playerAddress(cgBet.playerAddress), betTime(cgBet.betTime) { }
+        gameType(cgBet.gameType), vBetInfo(cgBet.vBetInfo), betAmount(cgBet.betAmount), playerAddress(cgBet.playerAddress), betTime(cgBet.betTime), resultType(cgBet.resultType), payout(cgBet.payout) { }
 
     bool IsCompleted() { return completed; }
     void SetCompleted() { completed = true; }
@@ -773,6 +796,16 @@ public:
             READWRITE(addrStr);
         }
         READWRITE(betTime);
+        uint8_t resType;
+        if (ser_action.ForRead()) {
+            READWRITE(resType);
+            resultType = (BetResultType) resType;
+        }
+        else {
+            resType = (uint8_t) resultType;
+            READWRITE(resType);
+        }
+        READWRITE(payout);
     }
 private:
     bool completed = false;
@@ -1027,5 +1060,7 @@ bool UndoPayoutsInfo(CBettingsView &bettingsViewCache, int height);
 
 /* Creates the bet payout vector for all winning Quick Games bets */
 void GetQuickGamesBetPayouts(CBettingsView& bettingsViewCache, const int height,  std::vector<CBetOut>& vExpectedPayouts, std::vector<CPayoutInfo>& vPayoutsInfo);
+
+bool UndoQuickGamesBetPayouts(CBettingsView &bettingsViewCache, int height);
 
 #endif // WAGERR_BET_H

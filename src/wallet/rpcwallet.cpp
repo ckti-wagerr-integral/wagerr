@@ -670,6 +670,17 @@ UniValue listbetsdb(const UniValue& params, bool fHelp)
     return ret;
 }
 
+std::string BetResultTypeToStr(BetResultType resType)
+{
+    switch (resType) {
+        case betResultUnknown: return std::string("pending");
+        case betResultWin: return std::string("win");
+        case betResultLose: return std::string("lose");
+        case betResultRefund: return std::string("refund");
+        default: return std::string("error");
+    }
+}
+
 UniValue getBets(uint32_t maxBets, std::set<std::string> addresses = {}) {
     UniValue ret(UniValue::VARR);
 
@@ -722,46 +733,6 @@ UniValue getBets(uint32_t maxBets, std::set<std::string> addresses = {}) {
                     uLockedEvent.push_back(Pair("tournament", mapping.sName));
                 }
             }
-
-            std::string betResult = "pending";
-            CPeerlessResult plResult;
-            if (bettingsView->results->Read(ResultKey{leg.nEventId}, plResult)) {
-
-                switch (leg.nOutcome) {
-                    case OutcomeType::moneyLineWin:
-                        betResult = plResult.nHomeScore > plResult.nAwayScore ? "win" : "lose";
-
-                        break;
-                    case OutcomeType::moneyLineLose:
-                        betResult = plResult.nAwayScore > plResult.nHomeScore ? "win" : "lose";
-
-                        break;
-                    case OutcomeType::moneyLineDraw:
-                        betResult = plResult.nHomeScore == plResult.nAwayScore ? "win" : "lose";
-
-                        break;
-                    case OutcomeType::spreadHome:
-                        betResult = "Check block explorer for result.";
-
-                        break;
-                    case OutcomeType::spreadAway:
-                        betResult = "Check block explorer for result.";
-
-                        break;
-                    case OutcomeType::totalOver:
-                        betResult = "Check block explorer for result.";
-
-                        break;
-                    case OutcomeType::totalUnder:
-                        betResult = "Check block explorer for result.";
-
-                        break;
-                    default:
-                        LogPrintf("Invalid bet outcome");
-                }
-            }
-            uLockedEvent.push_back(Pair("result", betResult));
-
             uLeg.push_back(Pair("lockedEvent", uLockedEvent));
             uLegs.push_back(uLeg);
         }
@@ -773,6 +744,7 @@ UniValue getBets(uint32_t maxBets, std::set<std::string> addresses = {}) {
         uValue.push_back(Pair("amount", ValueFromAmount(uniBet.betAmount)));
         uValue.push_back(Pair("time", (uint64_t) uniBet.betTime));
         uValue.push_back(Pair("completed", uniBet.IsCompleted()? "yes" : "no"));
+        uValue.push_back(Pair("result", BetResultTypeToStr(uniBet.resultType)));
 
         if (uniBet.IsCompleted()) {
             uint32_t odds = 0;
@@ -867,14 +839,14 @@ UniValue getallbets(const UniValue& params, bool fHelp)
                 "            \"home\": home command\n"
                 "            \"away\": away command\n"
                 "            \"tournament\": tournament\n"
-                "            \"result\": lose/win/pending\n"
                 "          }\n"
                 "        },\n"
                 "        ...\n"
                 "      ],                          (list) The list of legs.\n"
                 "    \"address\": playerAddress    (string) The player address.\n"
                 "    \"amount\": x.xxx,            (numeric) The amount bet in WGR.\n"
-                "    \"time\":\"betting time\",    (string) The betting time.\n"
+                "    \"time\": \"betting time\",    (string) The betting time.\n"
+                "    \"result\": lose/win/refund/pending\n"
                 "  },\n"
                 "  ...\n"
                 "]\n"
@@ -929,14 +901,14 @@ UniValue getmybets(const UniValue& params, bool fHelp)
                 "            \"home\": home command\n"
                 "            \"away\": away command\n"
                 "            \"tournament\": tournament\n"
-                "            \"result\": lose/win/pending\n"
                 "          }\n"
                 "        },\n"
                 "        ...\n"
                 "      ],                          (list) The list of legs.\n"
                 "    \"address\": playerAddress    (string) The player address.\n"
                 "    \"amount\": x.xxx,            (numeric) The amount bet in WGR.\n"
-                "    \"time\":\"betting time\",    (string) The betting time.\n"
+                "    \"time\": \"betting time\",    (string) The betting time.\n"
+                "    \"result\": lose/win/refund/pending\n"
                 "  },\n"
                 "  ...\n"
                 "]\n"
