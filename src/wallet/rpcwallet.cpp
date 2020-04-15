@@ -749,6 +749,8 @@ UniValue getBets(CWallet *pwalletMain = NULL) {
             uint32_t legOdds = 0;
             if (bettingsView->results->Read(EventKey{leg.nEventId}, plResult)) {
                 uLockedEvent.push_back(Pair("eventResultType", EventResultTypeToStr((ResultType) plResult.nResultType)));
+                uLockedEvent.push_back(Pair("homeScore", (uint64_t) plResult.nHomeScore));
+                uLockedEvent.push_back(Pair("awayScore", (uint64_t) plResult.nAwayScore));
                 if (lockedEvent.nStartTime > 0 && uniBet.betTime > (lockedEvent.nStartTime - Params().BetPlaceTimeoutBlocks())) {
                     uLeg.push_back(Pair("legResultType", "refund - invalid bet"));
                 }
@@ -759,6 +761,8 @@ UniValue getBets(CWallet *pwalletMain = NULL) {
             }
             else {
                 uLockedEvent.push_back(Pair("eventResultType", "event result not found"));
+                uLockedEvent.push_back(Pair("homeScore", "undefined"));
+                uLockedEvent.push_back(Pair("awayScore", "undefined"));
                 uLeg.push_back(Pair("legResultType", "pending"));
             }
             uLeg.push_back(Pair("lockedEvent", uLockedEvent));
