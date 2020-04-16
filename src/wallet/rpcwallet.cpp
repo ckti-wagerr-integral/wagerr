@@ -693,7 +693,7 @@ std::string EventResultTypeToStr(ResultType resType)
     }
 }
 
-UniValue getBets(CWallet *pwalletMain = NULL) {
+UniValue getBets(uint32_t limit, CWallet *pwalletMain = NULL) {
     UniValue ret(UniValue::VARR);
 
     auto it = bettingsView->bets->NewIterator();
@@ -782,18 +782,27 @@ UniValue getBets(CWallet *pwalletMain = NULL) {
         ret.push_back(uValue);
     }
 
-    return ret;
+    if (limit != 0 && ret.size() > limit) {
+        UniValue retLimit{UniValue::VARR};
+        for (int i = ret.size() - limit; i < ret.size(); i++) {
+            retLimit.push_back(ret[i]);
+        }
+        return retLimit;
+    }
+    else {
+        return ret;
+    }
 }
 
 UniValue getallbets(const UniValue& params, bool fHelp)
 {
-    if (fHelp || params.size() != 0)
+    if (fHelp || params.size() > 1)
         throw std::runtime_error(
                 "getallbets\n"
                 "\nGet bets info for all wallets\n"
 
                 "\nArguments:\n"
-
+                "1. Last bets limit (numeric, optional) Limit response to last bets number.\n"
                 "\nResult:\n"
                 "[\n"
                 "  {\n"
@@ -832,18 +841,23 @@ UniValue getallbets(const UniValue& params, bool fHelp)
                 "\nExamples:\n" +
                 HelpExampleCli("getallbets", ""));
 
-    return getBets();
+    uint32_t limit = 0;
+    if (params.size()  == 1)
+        limit = params[0].get_int();
+
+    return getBets(limit);
 }
 
 
 UniValue getmybets(const UniValue& params, bool fHelp)
 {
-    if (fHelp || params.size() != 0)
+    if (fHelp || params.size() > 1)
         throw std::runtime_error(
                 "getmybets\n"
                 "\nGet bets info for my wallets.\n"
 
                 "\nArguments:\n"
+                "1. Last bets limit (numeric, optional) Limit response to last bets number.\n"
                 "\nResult:\n"
                 "[\n"
                 "  {\n"
@@ -882,10 +896,13 @@ UniValue getmybets(const UniValue& params, bool fHelp)
                 "\nExamples:\n" +
                 HelpExampleCli("getmybets", ""));
 
+    uint32_t limit = 0;
+    if (params.size() == 1)
+        limit = params[0].get_int();
 
     EnsureWalletIsUnlocked();
 
-    return getBets(pwalletMain);
+    return getBets(limit, pwalletMain);
 }
 
 UniValue listchaingamesbets(const UniValue& params, bool fHelp)
