@@ -371,11 +371,11 @@ UniValue listbets(const UniValue& params, bool fHelp)
                         if (bettingsView->results->Read(ResultKey{plBet.nEventId}, plResult)) {
 
                             switch (plBet.nOutcome) {
-                                case OutcomeType::moneyLineWin:
+                                case OutcomeType::moneyLineHomeWin:
                                     betResult = plResult.nHomeScore > plResult.nAwayScore ? "win" : "lose";
 
                                     break;
-                                case OutcomeType::moneyLineLose:
+                                case OutcomeType::moneyLineAwayWin:
                                     betResult = plResult.nAwayScore > plResult.nHomeScore ? "win" : "lose";
 
                                     break;
@@ -533,11 +533,11 @@ UniValue getbet(const UniValue& params, bool fHelp)
                 if (bettingsView->results->Read(ResultKey{plBet.nEventId}, plResult)) {
 
                     switch (plBet.nOutcome) {
-                    case OutcomeType::moneyLineWin:
+                    case OutcomeType::moneyLineHomeWin:
                         betResult = plResult.nHomeScore > plResult.nAwayScore ? "win" : "lose";
 
                         break;
-                    case OutcomeType::moneyLineLose:
+                    case OutcomeType::moneyLineAwayWin:
                         betResult = plResult.nAwayScore > plResult.nHomeScore ? "win" : "lose";
 
                         break;

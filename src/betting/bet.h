@@ -16,8 +16,8 @@
 #include <boost/exception/to_string.hpp>
 // The supported bet outcome types.
 typedef enum OutcomeType {
-    moneyLineWin  = 0x01,
-    moneyLineLose = 0x02,
+    moneyLineHomeWin  = 0x01,
+    moneyLineAwayWin = 0x02,
     moneyLineDraw = 0x03,
     spreadHome    = 0x04,
     spreadAway    = 0x05,

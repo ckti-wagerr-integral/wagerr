@@ -1382,11 +1382,11 @@ uint32_t GetBetOdds(const CPeerlessBet &bet, const CPeerlessEvent &lockedEvent, 
     if (result.nResultType == ResultType::eventRefund)
         return oddsDivisor;
     switch (bet.nOutcome) {
-        case moneyLineWin:
+        case moneyLineHomeWin:
             if (result.nResultType == ResultType::mlRefund || lockedEvent.nHomeOdds == 0) return oddsDivisor;
             if (result.nHomeScore > result.nAwayScore) return lockedEvent.nHomeOdds;
             break;
-        case moneyLineLose:
+        case moneyLineAwayWin:
             if (result.nResultType == ResultType::mlRefund || lockedEvent.nAwayOdds == 0) return oddsDivisor;
             if (result.nAwayScore > result.nHomeScore) return lockedEvent.nAwayOdds;
             break;
@@ -1630,10 +1630,10 @@ void GetBetPayoutsLegacy(int height, std::vector<CBetOut>& vExpectedPayouts, std
 
         // Find MoneyLine outcome (result).
         if (result.nHomeScore > result.nAwayScore) {
-            nMoneylineResult = moneyLineWin;
+            nMoneylineResult = moneyLineHomeWin;
         }
         else if (result.nHomeScore < result.nAwayScore) {
-            nMoneylineResult = moneyLineLose;
+            nMoneylineResult = moneyLineAwayWin;
         }
         else if (result.nHomeScore == result.nAwayScore) {
             nMoneylineResult = moneyLineDraw;
@@ -1678,10 +1678,10 @@ void GetBetPayoutsLegacy(int height, std::vector<CBetOut>& vExpectedPayouts, std
                                 tempEventStartTime = pe.nStartTime;
 
                                 // Set the temp moneyline odds.
-                                if (nMoneylineResult == moneyLineWin) {
+                                if (nMoneylineResult == moneyLineHomeWin) {
                                     nTempMoneylineOdds = pe.nHomeOdds;
                                 }
-                                else if (nMoneylineResult == moneyLineLose) {
+                                else if (nMoneylineResult == moneyLineAwayWin) {
                                     nTempMoneylineOdds = pe.nAwayOdds;
                                 }
                                 else if (nMoneylineResult == moneyLineDraw) {
@@ -1720,10 +1720,10 @@ void GetBetPayoutsLegacy(int height, std::vector<CBetOut>& vExpectedPayouts, std
                             UpdateMoneyLine = true;
 
                             // If current event ID matches result ID set the odds.
-                            if (nMoneylineResult == moneyLineWin) {
+                            if (nMoneylineResult == moneyLineHomeWin) {
                                 nTempMoneylineOdds = puo.nHomeOdds;
                             }
-                            else if (nMoneylineResult == moneyLineLose) {
+                            else if (nMoneylineResult == moneyLineAwayWin) {
                                 nTempMoneylineOdds = puo.nAwayOdds;
                             }
                             else if (nMoneylineResult == moneyLineDraw) {
@@ -1887,8 +1887,8 @@ void GetBetPayoutsLegacy(int height, std::vector<CBetOut>& vExpectedPayouts, std
                                     } else if (result.nResultType == ResultType::mlRefund){
                                         // Calculate winnings.
                                         if (pb.nOutcome == OutcomeType::moneyLineDraw ||
-                                                pb.nOutcome == OutcomeType::moneyLineLose ||
-                                                pb.nOutcome == OutcomeType::moneyLineWin) {
+                                                pb.nOutcome == OutcomeType::moneyLineAwayWin ||
+                                                pb.nOutcome == OutcomeType::moneyLineHomeWin) {
                                             payout = betAmount;
                                         }
                                         else if (spreadsFound && (pb.nOutcome == vSpreadsResult.at(0) || pb.nOutcome == vSpreadsResult.at(1))) {
@@ -2394,10 +2394,10 @@ void ParseBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, co
                             bettingsViewCache.events->Read(eventKey, plEvent)) {
                         vUndos.emplace_back(BettingUndoVariant{plEvent}, (uint32_t)height);
                         switch (bet.nOutcome) {
-                            case moneyLineWin:
+                            case moneyLineHomeWin:
                                 plEvent.nMoneyLineHomeBets += 1;
                                 break;
-                            case moneyLineLose:
+                            case moneyLineAwayWin:
                                 plEvent.nMoneyLineAwayBets += 1;
                                 break;
                             case moneyLineDraw:
@@ -2457,7 +2457,7 @@ void ParseBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, co
                     bettingsViewCache.SaveBettingUndo(undoId, {CBettingUndo{BettingUndoVariant{plEvent}, (uint32_t)height}});
                     // Check which outcome the bet was placed on and add to accumulators
                     switch (plBet.nOutcome) {
-                        case moneyLineWin:
+                        case moneyLineHomeWin:
                             winnings = betAmount * plEvent.nHomeOdds;
                             // To avoid internal overflow issues, first divide and then multiply.
                             // This will not cause inaccuracy, because the Odds (and thus the winnings) are scaled by a
@@ -2467,7 +2467,7 @@ void ParseBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, co
                             plEvent.nMoneyLineHomePotentialLiability += payout / COIN ;
                             plEvent.nMoneyLineHomeBets += 1;
                             break;
-                        case moneyLineLose:
+                        case moneyLineAwayWin:
                             winnings = betAmount * plEvent.nAwayOdds;
                             burn = (winnings - betAmount*oddsDivisor) / 2000 * betXPermille;
                             payout = winnings - burn;
