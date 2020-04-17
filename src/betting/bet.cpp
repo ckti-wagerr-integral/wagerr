@@ -2293,6 +2293,10 @@ bool CheckBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, co
             std::vector<CPeerlessBet> legs;
             std::vector<CPeerlessEvent> lockedEvents;
             if (CPeerlessBet::ParlayFromOpCode(opCodeHexStr, legs)) {
+                // Validate parlay bet amount so its between 25 - 4000 WGR inclusive.
+                if (betAmount < (Params().MinBetPayoutRange()  * COIN ) || betAmount > (Params().MaxParlayBetPayoutRange() * COIN)) {
+                    return error("CheckBettingTX: Bet placed with invalid amount %lu!", betAmount);
+                }
                 // delete duplicated legs
                 std::sort(legs.begin(), legs.end());
                 legs.erase(std::unique(legs.begin(), legs.end()), legs.end());
@@ -2315,6 +2319,10 @@ bool CheckBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, co
 
             CPeerlessBet plBet;
             if (CPeerlessBet::FromOpCode(opCode, plBet)) {
+                // Validate bet amount so its between 25 - 10000 WGR inclusive.
+                if (betAmount < (Params().MinBetPayoutRange()  * COIN ) || betAmount > (Params().MaxBetPayoutRange() * COIN)) {
+                    return error("CheckBettingTX: Bet placed with invalid amount %lu!", betAmount);
+                }
                 CPeerlessEvent plEvent;
                 // Find the event in DB
                 if (bettingsViewCache.events->Read(EventKey{plBet.nEventId}, plEvent)) {
@@ -2324,6 +2332,14 @@ bool CheckBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, co
                 }
                 else {
                     return error("CheckBettingTX: Failed to find event %lu!", plBet.nEventId);
+                }
+            }
+
+            CQuickGamesTxBet qgTxBet;
+            if (CQuickGamesTxBet::FromOpCode(opCodeHexStr, qgTxBet)) {
+                // Validate quick game bet amount so its between 25 - 10000 WGR inclusive.
+                if (betAmount < (Params().MinBetPayoutRange()  * COIN ) || betAmount > (Params().MaxBetPayoutRange() * COIN)) {
+                    return error("CheckBettingTX: Bet placed with invalid amount %lu!", betAmount);
                 }
             }
         }
