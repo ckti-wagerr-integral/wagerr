@@ -6,6 +6,7 @@
 #ifndef WAGERR_DICE_H
 #define WAGERR_DICE_H
 
+#include "serialize.h"
 #include "uint256.h"
 
 namespace quickgames {
@@ -16,10 +17,37 @@ typedef enum QuickGamesDiceBetType {
     qgDiceTotalOver = 0x02,
     qgDiceTotalUnder = 0x03,
     qgDiceEven = 0x04,
-    qgDiceOdd = 0x05
+    qgDiceOdd = 0x05,
+    qgDiceUndefined = 0xff,
 } QuickGamesDiceBetType;
 
+struct DiceBetInfo {
+    QuickGamesDiceBetType betType;
+    uint32_t betNumber;
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp (Stream& s, Operation ser_action, int nType, int nVersion) {
+        uint8_t type;
+        if (ser_action.ForRead()) {
+            READWRITE(type);
+            betType = (QuickGamesDiceBetType) type;
+        }
+        else {
+            type = (uint8_t) betType;
+            READWRITE(type);
+        }
+        READWRITE(betNumber);
+    }
+};
+
+std::map<std::string, std::string> DiceBetInfoParser(std::vector<unsigned char>& betInfo, uint256 seed);
+
 uint32_t DiceHandler(std::vector<unsigned char>& betInfo, uint256 seed);
+
+std::string DiceGameTypeToStr(QuickGamesDiceBetType type);
+QuickGamesDiceBetType StrToDiceGameType(std::string strType);
 
 } // namespace quickgames
 

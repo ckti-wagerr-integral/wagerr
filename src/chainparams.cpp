@@ -209,6 +209,7 @@ public:
             std::string("Dice"), // Game name
             QuickGamesType::qgDice, // game type
             &quickgames::DiceHandler, // game bet handler
+            &quickgames::DiceBetInfoParser, // bet info parser
             std::string("Wm5om9hBJTyKqv5FkMSfZ2FDMeGp12fkTe"), // Dev address
             400, // OMNO reward permille (40%)
             100); // Dev reward permille (10%)
@@ -375,6 +376,7 @@ public:
             std::string("Dice"), // Game name
             QuickGamesType::qgDice, // game type
             &quickgames::DiceHandler, // game bet handler
+            &quickgames::DiceBetInfoParser, // bet info parser
             std::string("TLceyDrdPLBu8DK6UZjKu4vCDUQBGPybcY"), // Dev address
             400, // OMNO reward permille (40%)
             100); // Dev reward permille (10%)
@@ -501,6 +503,7 @@ public:
             std::string("Dice"), // Game name
             QuickGamesType::qgDice, // game type
             &quickgames::DiceHandler, // game bet handler
+            &quickgames::DiceBetInfoParser, // bet info parser
             std::string("TLuTVND9QbZURHmtuqD5ESECrGuB9jLZTs"), // Dev address
             400, // OMNO reward permille (40%)
             100); // Dev reward permille (10%)
