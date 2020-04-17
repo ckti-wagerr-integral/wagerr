@@ -2246,7 +2246,6 @@ void GetQuickGamesBetPayouts(CBettingsView& bettingsViewCache, const int height,
             CAmount nOMNOReward = (CAmount)(feePermille / 1000 * gameView.nOMNORewardPermille / oddsDivisor);
             vExpectedPayouts.emplace_back(nOMNOReward, GetScriptForDestination(CBitcoinAddress(OMNOPayoutAddr).Get()), qgBet.betAmount);
             vPayoutsInfo.emplace_back(zeroKey, PayoutType::quickGamesReward);
-
         }
         else {
             qgBet.resultType = BetResultType::betResultLose;
