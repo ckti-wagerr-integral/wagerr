@@ -38,7 +38,9 @@ struct DiceBetInfo {
             type = (uint8_t) betType;
             READWRITE(type);
         }
-        READWRITE(betNumber);
+        if (type != qgDiceEven && type != qgDiceOdd) {
+            READWRITE(betNumber);
+        }
     }
 };
 

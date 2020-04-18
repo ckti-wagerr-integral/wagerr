@@ -927,7 +927,7 @@ UniValue getQuickGamesBets(uint32_t limit, CWallet *pwalletMain = NULL) {
         if (pwalletMain && IsMine(*pwalletMain, qgBet.playerAddress.Get()) == ISMINE_NO)
             continue;
 
-        CBlockIndex *blockIndex = chainActive[(int) key.blockHeight + 1];
+        CBlockIndex *blockIndex = chainActive[(int) key.blockHeight];
         if (blockIndex)
             hash = blockIndex->hashProofOfStake;
 

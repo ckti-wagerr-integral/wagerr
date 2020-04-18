@@ -76,20 +76,19 @@ uint32_t DiceHandler(std::vector<unsigned char>& betInfo, uint256 seed)
     else if (info.betType == qgDiceEven && sum % 2 == 0) {
         return Params().OddsDivisor() * 2;
     }
-
     if (info.betType == qgDiceEqual && sum == info.betNumber) {
         return Params().OddsDivisor() * NUMBER_OF_OUTCOMES / Dice_NumberOfWinCases(info.betNumber);
     }
     else if (info.betType == qgDiceNotEqual && sum != info.betNumber) {
         return Params().OddsDivisor() * NUMBER_OF_OUTCOMES / (NUMBER_OF_OUTCOMES - Dice_NumberOfWinCases(info.betNumber));
     }
-    else if (info.betType == qgDiceTotalUnder && sum <= info.betNumber) {
+    else if (info.betType == qgDiceTotalUnder && info.betNumber <= sum) {
         uint64_t numberOfWinCases = 0;
         for (uint32_t i = 2; i <= info.betNumber; ++i)
             numberOfWinCases += Dice_NumberOfWinCases(i);
         return Params().OddsDivisor() * NUMBER_OF_OUTCOMES / numberOfWinCases;
     }
-    else if (info.betType == qgDiceTotalOver && sum >= info.betNumber) {
+    else if (info.betType == qgDiceTotalOver && info.betNumber > sum) {
         uint64_t numberOfWinCases = 0;
         for (uint32_t i = 2; i <= info.betNumber; ++i)
             numberOfWinCases += Dice_NumberOfWinCases(i);

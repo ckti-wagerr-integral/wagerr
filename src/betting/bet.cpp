@@ -21,7 +21,7 @@
 #define PSE_OP_STRLEN    34
 #define PTE_OP_STRLEN    34
 #define PEP_OP_STRLEN    22
-#define CGB_OP_STRMINLEN 12
+#define CGB_OP_STRMINLEN 10
 
 CBettingsView* bettingsView = nullptr;
 
@@ -2257,7 +2257,7 @@ void GetQuickGamesBetPayouts(CBettingsView& bettingsViewCache, const int height,
         vEntriesToUpdate.emplace_back(std::pair<QuickGamesBetKey, CQuickGamesBet>{qgKey, qgBet});
     }
     for (auto pair : vEntriesToUpdate) {
-        bettingsViewCache.bets->Update(pair.first, pair.second);
+        bettingsViewCache.quickGamesBets->Update(pair.first, pair.second);
     }
 }
 

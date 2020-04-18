@@ -4,13 +4,21 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 from test_framework.betting_opcode import *
-from test_framework.authproxy import JSONRPCException
+from test_framework.script import CScript, OP_RETURN
+from test_framework.messages import CTxOut
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import wait_until, rpc_port, assert_equal, assert_raises_rpc_error
 from distutils.dir_util import copy_tree, remove_tree
 from decimal import *
-# import time
+from test_framework.mininode import COIN
 import os
+
+DICE_TYPE = { "equal": QG_DICE_EQUAL,
+              "not equal": QG_DICE_NOT_EQUAL,
+              "total over": QG_DICE_TOTAL_OVER,
+              "total under": QG_DICE_TOTAL_UNDER,
+              "even": QG_DICE_EVEN,
+              "odd": QG_DICE_ODD}
 
 WGR_WALLET_ORACLE = { "addr": "TXuoB9DNEuZx1RCfKw3Hsv7jNUHTt4sVG1", "key": "TBwvXbNNUiq7tDkR2EXiCbPxEJRTxA1i6euNyAE9Ag753w36c1FZ" }
 WGR_WALLET_DEV = { "addr": "TLuTVND9QbZURHmtuqD5ESECrGuB9jLZTs", "key": "TFCrxaUt3EjHzMGKXeBqA7sfy3iaeihg5yZPSrf9KEyy4PHUMWVe" }
@@ -96,11 +104,16 @@ class QgDiceTest(BitcoinTestFramework):
             return True
         return False
 
+    def post_qg_bet(self, bet, type_game, number = 1):
+        mqg_bet_opcode = make_dice_bet(type_game, number)
+        scriptPubKey = CScript([OP_RETURN, bytes.fromhex(mqg_bet_opcode)])
+        output = CTxOut(bet, scriptPubKey)
+        post_raw_opcode(self.nodes[2], output, self.players[0])
+
     def check_dice(self):
         self.log.info("Check Dice Game...")
-        player_bet = 100
+        player_bet = 100 * COIN
 
-        # self.nodes[1].importprivkey(WGR_WALLET_ORACLE['key'])
         self.nodes[1].importprivkey(WGR_WALLET_DEV['key'])
         self.nodes[3].importprivkey(WGR_WALLET_OMNO['key'])
 
@@ -110,35 +123,25 @@ class QgDiceTest(BitcoinTestFramework):
             self.nodes[0].generate(1)
 
         for i in range(20):
-            # self.nodes[0].sendtoaddress(WGR_WALLET_ORACLE['addr'], 2000)
             self.nodes[0].sendtoaddress(self.players[0], 2000)
 
         self.nodes[0].generate(1)
         self.sync_all()
         self.nodes[0].generate(1)
         self.nodes[0].generate(1)
-        # check oracle balance
-        # assert_equal(self.nodes[1].getbalance(), 40000)
         # check players balance
         assert_equal(self.nodes[2].getbalance(), 40000)
+        # check dev balance
+        assert_equal(self.nodes[1].getbalance(), 0)
+        # check omno balance
+        assert_equal(self.nodes[3].getbalance(), 0)
 
-        mqg_bet_opcode = make_dice_bet(QG_DICE_EQUAL, 7)
-        post_opcode(self.nodes[2], mqg_bet_opcode, self.players[0])
-
-        mqg_bet_opcode = make_dice_bet(QG_DICE_NOT_EQUAL, 7)
-        post_opcode(self.nodes[2], mqg_bet_opcode, self.players[0])
-
-        mqg_bet_opcode = make_dice_bet(QG_DICE_TOTAL_OVER, 7)
-        post_opcode(self.nodes[2], mqg_bet_opcode, self.players[0])
-
-        mqg_bet_opcode = make_dice_bet(QG_DICE_TOTAL_UNDER, 7)
-        post_opcode(self.nodes[2], mqg_bet_opcode, self.players[0])
-
-        mqg_bet_opcode = make_dice_bet(QG_DICE_EVEN)
-        post_opcode(self.nodes[2], mqg_bet_opcode, self.players[0])
-
-        mqg_bet_opcode = make_dice_bet(QG_DICE_ODD)
-        post_opcode(self.nodes[2], mqg_bet_opcode, self.players[0])
+        self.post_qg_bet(player_bet, QG_DICE_EQUAL, 7)
+        self.post_qg_bet(player_bet, QG_DICE_NOT_EQUAL, 7)
+        self.post_qg_bet(player_bet, QG_DICE_TOTAL_OVER, 7)
+        self.post_qg_bet(player_bet, QG_DICE_TOTAL_UNDER, 7)
+        self.post_qg_bet(player_bet, QG_DICE_EVEN)
+        self.post_qg_bet(player_bet, QG_DICE_ODD)
 
         self.sync_all()
         blockHash = self.nodes[0].generate(1)[0]
@@ -147,7 +150,66 @@ class QgDiceTest(BitcoinTestFramework):
         for i in range(101):
             self.nodes[0].generate(1)
         self.sync_all()
-        assert_equal(self.nodes[2].getbalance(), 40000)
+
+        all_qg_bets = self.nodes[0].getallqgbets()
+        assert_equal(len(all_qg_bets), 6) # 6 dice bets
+
+        print("all_qg_bets", all_qg_bets)
+        resultBlockHash = 0
+        sum = 0
+        winAmount = 0
+        for bet in all_qg_bets:
+            assert_equal(bet['blockHeight'], blockInfo['height'])
+            if resultBlockHash == 0:
+                resultBlockHash = bet['resultBlockHash']
+                sum = Decimal(bet['betInfo']['sum'])
+            else:
+                assert_equal(resultBlockHash, bet['resultBlockHash'])
+                assert_equal(sum, Decimal(bet['betInfo']['sum']))
+            if DICE_TYPE[bet['betInfo']['diceGameType']] == QG_DICE_EQUAL:
+                print("QG_DICE_EQUAL", sum)
+                if sum == 7:
+                    assert_equal(bet['betResultType'], 'win')
+                    winAmount = winAmount + Decimal(bet['payout'])
+                else:
+                    assert_equal(bet['betResultType'], 'lose')
+            if DICE_TYPE[bet['betInfo']['diceGameType']] == QG_DICE_NOT_EQUAL:
+                print("QG_DICE_NOT_EQUAL", sum)
+                if sum != 7:
+                    assert_equal(bet['betResultType'], 'win')
+                    winAmount = winAmount + Decimal(bet['payout'])
+                else:
+                    assert_equal(bet['betResultType'], 'lose')
+            if DICE_TYPE[bet['betInfo']['diceGameType']] == QG_DICE_TOTAL_OVER:
+                print("QG_DICE_TOTAL_OVER", sum)
+                if sum > 7:
+                    assert_equal(bet['betResultType'], 'win')
+                    winAmount = winAmount + Decimal(bet['payout'])
+                else:
+                    assert_equal(bet['betResultType'], 'lose')
+            if DICE_TYPE[bet['betInfo']['diceGameType']] == QG_DICE_TOTAL_UNDER:
+                print("QG_DICE_TOTAL_UNDER", sum)
+                if sum <= 7:
+                    assert_equal(bet['betResultType'], 'win')
+                    winAmount = winAmount + Decimal(bet['payout'])
+                else:
+                    assert_equal(bet['betResultType'], 'lose')
+            if DICE_TYPE[bet['betInfo']['diceGameType']] == QG_DICE_EVEN:
+                print("QG_DICE_EVEN", sum, sum % 2)
+                if sum % 2 == 0:
+                    assert_equal(bet['betResultType'], 'win')
+                    winAmount = winAmount + Decimal(bet['payout'])
+                else:
+                    assert_equal(bet['betResultType'], 'lose')
+            if DICE_TYPE[bet['betInfo']['diceGameType']] == QG_DICE_ODD:
+                print("QG_DICE_ODD", sum, sum % 2)
+                if sum % 2 == 1:
+                    assert_equal(bet['betResultType'], 'win')
+                    winAmount = winAmount + Decimal(bet['payout'])
+                else:
+                    assert_equal(bet['betResultType'], 'lose')
+
+        assert_equal(self.nodes[2].getbalance(), 40000 + winAmount - 600) # 6 dice bets
 
     def run_test(self):
         self.check_dice()

@@ -763,7 +763,7 @@ public:
     explicit CQuickGamesBet(const QuickGamesType gameType, const std::vector<unsigned char>& vBetInfo, const CAmount betAmount, const CBitcoinAddress& playerAddress, const int64_t betTime) :
         gameType(gameType), vBetInfo(vBetInfo), betAmount(betAmount), playerAddress(playerAddress), betTime(betTime) { }
     explicit CQuickGamesBet(const CQuickGamesBet& cgBet) :
-        gameType(cgBet.gameType), vBetInfo(cgBet.vBetInfo), betAmount(cgBet.betAmount), playerAddress(cgBet.playerAddress), betTime(cgBet.betTime), resultType(cgBet.resultType), payout(cgBet.payout) { }
+        gameType(cgBet.gameType), vBetInfo(cgBet.vBetInfo), betAmount(cgBet.betAmount), playerAddress(cgBet.playerAddress), betTime(cgBet.betTime), resultType(cgBet.resultType), payout(cgBet.payout), completed(cgBet.completed) { }
 
     bool IsCompleted() { return completed; }
     void SetCompleted() { completed = true; }
@@ -806,6 +806,7 @@ public:
             READWRITE(resType);
         }
         READWRITE(payout);
+        READWRITE(completed);
     }
 private:
     bool completed = false;
