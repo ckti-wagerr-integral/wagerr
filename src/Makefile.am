@@ -84,7 +84,7 @@ BITCOIN_CORE_H = \
   base58.h \
   betting/bet.h \
   betting/quickgames/dice.h \
-  betting/quickgames/quickgamesview.h \
+  betting/quickgames/qgview.h \
   bip38.h \
   bloom.h \
   blocksignature.h \

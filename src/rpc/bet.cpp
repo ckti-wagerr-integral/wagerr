@@ -122,9 +122,6 @@ UniValue getmappingname(const UniValue& params, bool fHelp)
         mapping.push_back(Pair("exists", true));
         mapping.push_back(Pair("mapping-index", static_cast<uint64_t>(map.nMType)));
     }
-    else {
-        throw std::runtime_error("Currently no mapping name exists for the mapping name you provided.");
-    }
 
     result.push_back(mapping);
 
