@@ -380,7 +380,7 @@ def sync_blocks(rpc_connections, *, wait=1, timeout=60):
     # initial max height because the two RPCs look at different internal global
     # variables (chainActive vs latestBlock) and the former gets updated
     # earlier.
-    time.sleep(5)
+    #time.sleep(5)
     maxheight = max(x.getblockcount() for x in rpc_connections)
     start_time = cur_time = time.time()
     while cur_time <= start_time + timeout:
