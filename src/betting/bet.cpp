@@ -1141,7 +1141,7 @@ bool IsBlockPayoutsValid(CBettingsView &bettingsViewCache, const std::vector<CBe
 
             LogPrintf("Bet Address %s  - Expected Bet Address: %s \n", betAddrS.c_str(), expectedAddrS.c_str());
 
-            if (vExpected != voutValue && betAddrS != expectedAddrS) {
+            if (vExpected != voutValue || betAddrS != expectedAddrS) {
                 LogPrintf("Validation failed! \n");
                 return false;
             }
