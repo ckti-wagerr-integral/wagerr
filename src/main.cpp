@@ -2609,7 +2609,7 @@ bool DisconnectBlock(CBlock& block, CValidationState& state, CBlockIndex* pindex
             // revert complete bet payouts marker
             if (pindex->nHeight > Params().ParlayBetStartHeight()) {
                 if (!UndoBetPayouts(bettingsViewCache, pindex->nHeight)) {
-                    error("DisconnectBlock(): undo payout data is inconsistent");
+                    error("DisconnectBlock(): undo payout data for bets is inconsistent");
                     return false;
                 }
             }
@@ -2619,6 +2619,11 @@ bool DisconnectBlock(CBlock& block, CValidationState& state, CBlockIndex* pindex
             }
             if (!UndoBettingTx(bettingsViewCache, tx, pindex->nHeight, pindex->GetBlockTime())) {
                 error("DisconnectBlock(): custom transaction and undo data inconsistent");
+                return false;
+            }
+
+            if (!UndoQuickGamesBetPayouts(bettingsViewCache, pindex->nHeight)) {
+                error("DisconnectBlock(): undo payout data for quick games bets is inconsistent");
                 return false;
             }
         }

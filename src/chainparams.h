@@ -52,14 +52,16 @@ public:
     const QuickGamesType type;
     const BetHandler handler;
     const std::string specialAddress;
-    const uint32_t devRewardPermille;
+    const uint32_t nFeePermille = 10; // 1%
+    const uint32_t nDevRewardPermille;
+    const uint32_t nOMNORewardPermille;
 
     explicit CQuickGamesView() = delete;
-    explicit CQuickGamesView(const std::string name, const QuickGamesType type, BetHandler handler, const std::string specialAddress, const uint32_t devRewardPermille) :
-        name(name), type(type), handler(handler), specialAddress(specialAddress), devRewardPermille(devRewardPermille) { }
+    explicit CQuickGamesView(const std::string name, const QuickGamesType type, BetHandler handler, const std::string specialAddress, const uint32_t nOMNORewardPermille, const uint32_t nDevRewardPermille) :
+        name(name), type(type), handler(handler), specialAddress(specialAddress), nOMNORewardPermille(nOMNORewardPermille), nDevRewardPermille(nDevRewardPermille) { }
     // move constructor
     explicit CQuickGamesView(const CQuickGamesView&& view) :
-        name(view.name), type(view.type), handler(view.handler), specialAddress(view.specialAddress), devRewardPermille(view.devRewardPermille) { }
+        name(view.name), type(view.type), handler(view.handler), specialAddress(view.specialAddress), nFeePermille(view.nFeePermille), nOMNORewardPermille(view.nOMNORewardPermille),  nDevRewardPermille(view.nDevRewardPermille) { }
     // copy constructor
     explicit CQuickGamesView(const CQuickGamesView& view) = delete;
 };
