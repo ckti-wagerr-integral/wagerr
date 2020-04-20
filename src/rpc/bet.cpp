@@ -280,7 +280,7 @@ UniValue getpayoutinfosince(const UniValue& params, bool fHelp)
     std::vector<std::pair<bool, CPayoutInfo>> vPayoutsInfo;
     uint32_t nLastBlocks = 10;
     if (params.size() == 1) {
-        nLastBlocks = params[1].get_int();
+        nLastBlocks = params[0].get_int();
         if (nLastBlocks < 1)
             throw std::runtime_error("Invalid number of last blocks.");
     }
