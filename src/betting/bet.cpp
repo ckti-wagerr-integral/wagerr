@@ -953,7 +953,7 @@ bool CQuickGamesTxBet::FromOpCode(std::string opCode, CQuickGamesTxBet &bet)
     // get BTX format version
     ss >> byte;
     if (byte != (uint8_t) BTX_FORMAT_VERSION) return false;
-    // get parlay bet tx type
+    // get quick games bet tx type
     ss >> byte;
     if (byte != (uint8_t) qgBetTxType) return false;
     // get bet data
@@ -1263,7 +1263,7 @@ std::pair<std::vector<CChainGamesResult>,std::vector<std::string>> getCGLottoEve
 
 /**
  * Undo only bet payout mark as completed in DB.
- * But coin tx outs were undid early.
+ * But coin tx outs were undid early in native bitcoin core.
  * @return
  */
 bool UndoBetPayouts(CBettingsView &bettingsViewCache, int height)
@@ -1324,12 +1324,46 @@ bool UndoBetPayouts(CBettingsView &bettingsViewCache, int height)
 
             if (needUndo) {
                 uniBet.SetUncompleted();
+                uniBet.resultType = BetResultType::betResultUnknown;
+                uniBet.payout = 0;
                 vEntriesToUpdate.emplace_back(std::pair<UniversalBetKey, CUniversalBet>{uniBetKey, uniBet});
             }
         }
         for (auto pair : vEntriesToUpdate) {
             bettingsViewCache.bets->Update(pair.first, pair.second);
         }
+    }
+    return true;
+}
+
+/**
+ * Undo only quick games bet payout mark as completed in DB.
+ * But coin tx outs were undid early in native bitcoin core.
+ * @return
+ */
+bool UndoQuickGamesBetPayouts(CBettingsView &bettingsViewCache, int height)
+{
+    uint32_t blockHeight = static_cast<uint32_t>(height);
+
+    LogPrintf("Start undo quick games payouts...\n");
+
+    auto it = bettingsViewCache.quickGamesBets->NewIterator();
+    std::vector<std::pair<QuickGamesBetKey, CQuickGamesBet>> vEntriesToUpdate;
+    for (it->Seek(CBettingDB::DbTypeToBytes(QuickGamesBetKey{blockHeight, COutPoint()})); it->Valid(); it->Next()) {
+        QuickGamesBetKey qgBetKey;
+        CQuickGamesBet qgBet;
+        CBettingDB::BytesToDbType(it->Key(), qgBetKey);
+        CBettingDB::BytesToDbType(it->Value(), qgBet);
+        // skip if bet is uncompleted
+        if (!qgBet.IsCompleted()) continue;
+
+        qgBet.SetUncompleted();
+        qgBet.resultType = BetResultType::betResultUnknown;
+        qgBet.payout = 0;
+        vEntriesToUpdate.emplace_back(std::pair<QuickGamesBetKey, CQuickGamesBet>{qgBetKey, qgBet});
+    }
+    for (auto pair : vEntriesToUpdate) {
+        bettingsViewCache.quickGamesBets->Update(pair.first, pair.second);
     }
     return true;
 }
@@ -1348,11 +1382,11 @@ uint32_t GetBetOdds(const CPeerlessBet &bet, const CPeerlessEvent &lockedEvent, 
     if (result.nResultType == ResultType::eventRefund)
         return oddsDivisor;
     switch (bet.nOutcome) {
-        case moneyLineWin:
+        case moneyLineHomeWin:
             if (result.nResultType == ResultType::mlRefund || lockedEvent.nHomeOdds == 0) return oddsDivisor;
             if (result.nHomeScore > result.nAwayScore) return lockedEvent.nHomeOdds;
             break;
-        case moneyLineLose:
+        case moneyLineAwayWin:
             if (result.nResultType == ResultType::mlRefund || lockedEvent.nAwayOdds == 0) return oddsDivisor;
             if (result.nAwayScore > result.nHomeScore) return lockedEvent.nAwayOdds;
             break;
@@ -1520,13 +1554,18 @@ void GetBetPayouts(CBettingsView &bettingsViewCache, int height, std::vector<CBe
                 CAmount payout = winnings > 0 ? (winnings - ((winnings - uniBet.betAmount * oddsDivisor) / 1000 * betXPermille)) / oddsDivisor : 0;
 
                 if (payout > 0) {
+                    uniBet.resultType = odds == oddsDivisor ? BetResultType::betResultRefund : BetResultType::betResultWin;
                     // Add winning payout to the payouts vector.
                     vExpectedPayouts.emplace_back(payout, GetScriptForDestination(uniBet.playerAddress.Get()), uniBet.betAmount);
                     vPayoutsInfo.emplace_back(uniBetKey, odds == oddsDivisor ? PayoutType::bettingRefund : PayoutType::bettingPayout);
                 }
+                else {
+                    uniBet.resultType = BetResultType::betResultLose;
+                }
                 LogPrintf("\nBet %s is handled!\nPlayer address: %s\nPayout: %ll\n\n", uniBet.betOutPoint.ToStringShort(), uniBet.playerAddress.ToString(), payout);
                 // if handling bet is completed - mark it
                 uniBet.SetCompleted();
+                uniBet.payout = payout;
                 vEntriesToUpdate.emplace_back(std::pair<UniversalBetKey, CUniversalBet>{uniBetKey, uniBet});
             }
         }
@@ -1591,10 +1630,10 @@ void GetBetPayoutsLegacy(int height, std::vector<CBetOut>& vExpectedPayouts, std
 
         // Find MoneyLine outcome (result).
         if (result.nHomeScore > result.nAwayScore) {
-            nMoneylineResult = moneyLineWin;
+            nMoneylineResult = moneyLineHomeWin;
         }
         else if (result.nHomeScore < result.nAwayScore) {
-            nMoneylineResult = moneyLineLose;
+            nMoneylineResult = moneyLineAwayWin;
         }
         else if (result.nHomeScore == result.nAwayScore) {
             nMoneylineResult = moneyLineDraw;
@@ -1639,10 +1678,10 @@ void GetBetPayoutsLegacy(int height, std::vector<CBetOut>& vExpectedPayouts, std
                                 tempEventStartTime = pe.nStartTime;
 
                                 // Set the temp moneyline odds.
-                                if (nMoneylineResult == moneyLineWin) {
+                                if (nMoneylineResult == moneyLineHomeWin) {
                                     nTempMoneylineOdds = pe.nHomeOdds;
                                 }
-                                else if (nMoneylineResult == moneyLineLose) {
+                                else if (nMoneylineResult == moneyLineAwayWin) {
                                     nTempMoneylineOdds = pe.nAwayOdds;
                                 }
                                 else if (nMoneylineResult == moneyLineDraw) {
@@ -1681,10 +1720,10 @@ void GetBetPayoutsLegacy(int height, std::vector<CBetOut>& vExpectedPayouts, std
                             UpdateMoneyLine = true;
 
                             // If current event ID matches result ID set the odds.
-                            if (nMoneylineResult == moneyLineWin) {
+                            if (nMoneylineResult == moneyLineHomeWin) {
                                 nTempMoneylineOdds = puo.nHomeOdds;
                             }
-                            else if (nMoneylineResult == moneyLineLose) {
+                            else if (nMoneylineResult == moneyLineAwayWin) {
                                 nTempMoneylineOdds = puo.nAwayOdds;
                             }
                             else if (nMoneylineResult == moneyLineDraw) {
@@ -1848,8 +1887,8 @@ void GetBetPayoutsLegacy(int height, std::vector<CBetOut>& vExpectedPayouts, std
                                     } else if (result.nResultType == ResultType::mlRefund){
                                         // Calculate winnings.
                                         if (pb.nOutcome == OutcomeType::moneyLineDraw ||
-                                                pb.nOutcome == OutcomeType::moneyLineLose ||
-                                                pb.nOutcome == OutcomeType::moneyLineWin) {
+                                                pb.nOutcome == OutcomeType::moneyLineAwayWin ||
+                                                pb.nOutcome == OutcomeType::moneyLineHomeWin) {
                                             payout = betAmount;
                                         }
                                         else if (spreadsFound && (pb.nOutcome == vSpreadsResult.at(0) || pb.nOutcome == vSpreadsResult.at(1))) {
@@ -2159,7 +2198,6 @@ void GetCGLottoBetPayouts (int height, std::vector<CBetOut>& vexpectedCGLottoBet
 void GetQuickGamesBetPayouts(CBettingsView& bettingsViewCache, const int height,  std::vector<CBetOut>& vExpectedPayouts, std::vector<CPayoutInfo>& vPayoutsInfo)
 {
     uint64_t oddsDivisor{Params().OddsDivisor()};
-    uint64_t betXPermille{Params().BetXPermille()};
     UniversalBetKey zeroKey{0, COutPoint()};
 
     LogPrintf("Start generating quick games bets payouts...");
@@ -2190,21 +2228,33 @@ void GetQuickGamesBetPayouts(CBettingsView& bettingsViewCache, const int height,
         const CQuickGamesView& gameView = Params().QuickGamesArr()[qgBet.gameType];
         // if odds == 0 - bet lose, if odds > OddsDivisor - bet win, if odds == OddsDivisor - bet refunded
         uint32_t odds = gameView.handler(qgBet.vBetInfo, blockIndex->hashProofOfStake);
-        CAmount winnings = qgBet.betAmount * odds;
-        CAmount payout = winnings > 0 ? (winnings - ((winnings - qgBet.betAmount * oddsDivisor) / 1000 * betXPermille)) / oddsDivisor : 0;
+        CAmount winningsPermille = qgBet.betAmount * odds;
+        CAmount feePermille = winningsPermille > 0 ? (qgBet.betAmount * (odds - oddsDivisor) / 1000 * gameView.nFeePermille) : 0;
+        CAmount payout = winningsPermille > 0 ? (winningsPermille - feePermille) / oddsDivisor : 0;
 
         if (payout > 0) {
+            qgBet.resultType = odds == oddsDivisor ? BetResultType::betResultRefund : BetResultType::betResultWin;
             // Add winning payout to the payouts vector.
             vExpectedPayouts.emplace_back(payout, GetScriptForDestination(qgBet.playerAddress.Get()), qgBet.betAmount);
             vPayoutsInfo.emplace_back(qgKey, odds == oddsDivisor ? PayoutType::quickGamesRefund : PayoutType::quickGamesPayout);
-            // Dev reward
-            CAmount reward = (CAmount)((qgBet.betAmount - payout) * gameView.devRewardPermille / (1000.0 - Params().BetXPermille()));
-            vExpectedPayouts.emplace_back(reward, GetScriptForDestination(CBitcoinAddress(gameView.specialAddress).Get()), qgBet.betAmount);
+           // Dev reward
+            CAmount devReward = (CAmount)(feePermille / 1000 * gameView.nDevRewardPermille / oddsDivisor);
+            vExpectedPayouts.emplace_back(devReward, GetScriptForDestination(CBitcoinAddress(gameView.specialAddress).Get()), qgBet.betAmount);
             vPayoutsInfo.emplace_back(zeroKey, PayoutType::quickGamesReward);
+            // OMNO reward
+            std::string OMNOPayoutAddr = Params().OMNOPayoutAddr();
+            CAmount nOMNOReward = (CAmount)(feePermille / 1000 * gameView.nOMNORewardPermille / oddsDivisor);
+            vExpectedPayouts.emplace_back(nOMNOReward, GetScriptForDestination(CBitcoinAddress(OMNOPayoutAddr).Get()), qgBet.betAmount);
+            vPayoutsInfo.emplace_back(zeroKey, PayoutType::quickGamesReward);
+
+        }
+        else {
+            qgBet.resultType = BetResultType::betResultLose;
         }
         LogPrintf("\nQuick game: %s, bet %s is handled!\nPlayer address: %s\nPayout: %ll\n\n", gameView.name, qgKey.outPoint.ToStringShort(), qgBet.playerAddress.ToString(), payout);
         // if handling bet is completed - mark it
         qgBet.SetCompleted();
+        qgBet.payout = payout;
         vEntriesToUpdate.emplace_back(std::pair<QuickGamesBetKey, CQuickGamesBet>{qgKey, qgBet});
     }
     for (auto pair : vEntriesToUpdate) {
@@ -2344,10 +2394,10 @@ void ParseBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, co
                             bettingsViewCache.events->Read(eventKey, plEvent)) {
                         vUndos.emplace_back(BettingUndoVariant{plEvent}, (uint32_t)height);
                         switch (bet.nOutcome) {
-                            case moneyLineWin:
+                            case moneyLineHomeWin:
                                 plEvent.nMoneyLineHomeBets += 1;
                                 break;
-                            case moneyLineLose:
+                            case moneyLineAwayWin:
                                 plEvent.nMoneyLineAwayBets += 1;
                                 break;
                             case moneyLineDraw:
@@ -2407,7 +2457,7 @@ void ParseBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, co
                     bettingsViewCache.SaveBettingUndo(undoId, {CBettingUndo{BettingUndoVariant{plEvent}, (uint32_t)height}});
                     // Check which outcome the bet was placed on and add to accumulators
                     switch (plBet.nOutcome) {
-                        case moneyLineWin:
+                        case moneyLineHomeWin:
                             winnings = betAmount * plEvent.nHomeOdds;
                             // To avoid internal overflow issues, first divide and then multiply.
                             // This will not cause inaccuracy, because the Odds (and thus the winnings) are scaled by a
@@ -2417,7 +2467,7 @@ void ParseBettingTx(CBettingsView& bettingsViewCache, const CTransaction& tx, co
                             plEvent.nMoneyLineHomePotentialLiability += payout / COIN ;
                             plEvent.nMoneyLineHomeBets += 1;
                             break;
-                        case moneyLineLose:
+                        case moneyLineAwayWin:
                             winnings = betAmount * plEvent.nAwayOdds;
                             burn = (winnings - betAmount*oddsDivisor) / 2000 * betXPermille;
                             payout = winnings - burn;
