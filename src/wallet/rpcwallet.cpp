@@ -1695,37 +1695,42 @@ UniValue placechaingamesbet(const UniValue& params, bool fHelp)
 
 UniValue placeqgdicebet(const UniValue& params, bool fHelp)
 {
-    if (fHelp || params.size() < 2 || params.size() > 4)
+    if (fHelp || params.size() < 2 || params.size() > 3)
         throw std::runtime_error(
             "\nPlace an amount as a bet on a quick game dice. The amount is rounded to the nearest 0.00000001\n" +
             HelpRequiringPassphrase() +
             "\nArguments:\n"
-            "1. Dice game type  (string, required) The dice game type. One type of:\n"
+            "1. Amount          (numeric, required) The amount in wgr to send. Min: 25, max: 4000.\n"
+            "2. Dice game type  (string, required) The dice game type. One type of:\n"
             "                                      equal, not equal, total over,\n"
             "                                      total under, even, odd.\n"
-            "2. Bet number      (numeric, required) The bet number for game. Min: 2, Max: 12.\n"
-            "3. Amount          (numeric, required) The amount in wgr to send. Min: 25, max: 4000.\n"
-            "4. \"comment\"     (string, optional) A comment used to store what the transaction is for.\n"
-            "                             This is not part of the transaction, just kept in your wallet.\n"
-            "4. \"comment-to\"  (string, optional) A comment to store the name of the person or organization\n"
-            "                             to which you're sending the transaction. This is not part of the\n"
-            "                             transaction, just kept in your wallet.\n"
+            "3. Bet number      (numeric, optional) The bet number required for all games type,\n"
+            "                                       except even and odd. Min: 2, Max: 12.\n"
             "\nResult:\n"
             "\"transactionid\"  (string) The transaction id.\n"
             "\nExamples:\n" +
-            HelpExampleCli("placeqgdicebet", "\"total over\" 6 50") +
-            HelpExampleRpc("placeqgdicebet", "\"total over\" 6 50"));
+            HelpExampleCli("placeqgdicebet", "1000 \"total over\" 6") +
+            HelpExampleRpc("placeqgdicebet", "1000 \"even\""));
+
+    CAmount nAmount = AmountFromValue(params[0]);
+
+    // Validate parlay bet amount so its between 25 - 4000 WGR inclusive.
+    if (nAmount < (Params().MinBetPayoutRange()  * COIN ) || nAmount > (Params().MaxParlayBetPayoutRange() * COIN)) {
+        throw JSONRPCError(RPC_BET_DETAILS_ERROR, "Error: Incorrect bet amount. Please ensure your bet is between 25 - 4000 WGR inclusive.");
+    }
 
     quickgames::DiceBetInfo betInfo;
 
-    auto betType = quickgames::StrToDiceGameType(params[0].get_str());
+    auto betType = quickgames::StrToDiceGameType(params[1].get_str());
     if (betType == quickgames::qgDiceUndefined)
         throw JSONRPCError(RPC_BET_DETAILS_ERROR, "Error: Incorrect bet type for dice game!");
 
-    uint32_t betNumber = params[1].get_int();
-    if (betNumber < 2 || betNumber > 12)
-        throw JSONRPCError(RPC_BET_DETAILS_ERROR, "Error: Incorrect bet number for dice game! It must be between 2 and 12.");
-
+    uint32_t betNumber = 0;
+    if (betType != quickgames::qgDiceEven && betType != quickgames::qgDiceOdd) {
+        betNumber = params[2].get_int();
+        if (betNumber < 2 || betNumber > 12)
+            throw JSONRPCError(RPC_BET_DETAILS_ERROR, "Error: Incorrect bet number for dice game! It must be between 2 and 12.");
+    }
     betInfo.betType = betType;
     betInfo.betNumber = betNumber;
 
@@ -1739,19 +1744,7 @@ UniValue placeqgdicebet(const UniValue& params, bool fHelp)
     std::string opCode;
     CQuickGamesTxBet::ToOpCode(txBet, opCode);
 
-    CAmount nAmount = AmountFromValue(params[2]);
-
-    // Validate parlay bet amount so its between 25 - 4000 WGR inclusive.
-    if (nAmount < (Params().MinBetPayoutRange()  * COIN ) || nAmount > (Params().MaxParlayBetPayoutRange() * COIN)) {
-        throw JSONRPCError(RPC_BET_DETAILS_ERROR, "Error: Incorrect bet amount. Please ensure your bet is between 25 - 4000 WGR inclusive.");
-    }
-
-    // Wallet comments
     CWalletTx wtx;
-    if (params.size() > 2 && !params[2].isNull() && !params[2].get_str().empty())
-        wtx.mapValue["comment"] = params[2].get_str();
-    if (params.size() > 3 && !params[3].isNull() && !params[3].get_str().empty())
-        wtx.mapValue["to"] = params[3].get_str();
 
     EnsureWalletIsUnlocked();
     EnsureEnoughWagerr(nAmount);
