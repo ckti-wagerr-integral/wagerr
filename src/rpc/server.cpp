@@ -402,6 +402,8 @@ static const CRPCCommand vRPCCommands[] =
         {"wallet", "listbetsdb", &listbetsdb, false, false, false},
         {"wallet", "getallbets", &getallbets, false, false, false},
         {"wallet", "getmybets", &getmybets, false, false, true},
+        {"wallet", "getallqgbets", &getallqgbets,false, false, false},
+        {"wallet", "getmyqgbets", &getmyqgbets,false, false, true},
         {"wagerr", "getpayoutinfo", &getpayoutinfo, false, false, false},
         {"wagerr", "getpayoutinfosince", &getpayoutinfosince, false, false, false},
 
@@ -452,6 +454,7 @@ static const CRPCCommand vRPCCommands[] =
         {"wallet", "multisend", &multisend, false, false, true},
         {"wallet", "placebet", &placebet, false, false, true},
         {"wallet", "placeparlaybet", &placeparlaybet, false, false, true},
+        {"wallet", "placeqgdicebet", &placeqgdicebet, false, false, true},
         {"wallet", "sendfrom", &sendfrom, false, false, true},
         {"wallet", "sendmany", &sendmany, false, false, true},
         {"wallet", "sendtoaddress", &sendtoaddress, false, false, true},
